@@ -30,8 +30,13 @@ export default {
         'float': 'float 6s ease-in-out infinite',
         'glow': 'glow 2s ease-in-out infinite alternate',
         'shimmer': 'shimmer 2.5s linear infinite',
+        'slide-down': 'slide-down 0.25s ease-out',
       },
       keyframes: {
+        'slide-down': {
+          '0%': { opacity: '0', transform: 'translateY(-8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
         gradient: {
           '0%, 100%': {
             'background-size': '200% 200%',

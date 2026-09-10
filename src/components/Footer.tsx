@@ -1,13 +1,34 @@
+import { Link } from 'react-router-dom'
+
 const Footer = () => {
   return (
     <footer className="bg-white border-t border-gray-100">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           <div>
             <h3 className="text-2xl font-semibold mb-6">Fortunas</h3>
             <p className="text-fortunas-gray text-sm leading-relaxed max-w-md">
               Building modern applications, AI-driven products, and intelligent digital platforms.
             </p>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold mb-4">Our Apps</h4>
+            <div className="space-y-2 text-sm">
+              <p>
+                <Link to="/apps" className="text-fortunas-gray hover:text-fortunas-accent transition-colors">
+                  TimeWell
+                </Link>
+              </p>
+              <p>
+                <Link
+                  to="/timewell/privacy"
+                  className="text-fortunas-gray hover:text-fortunas-accent transition-colors"
+                >
+                  TimeWell Privacy Policy
+                </Link>
+              </p>
+            </div>
           </div>
 
           <div className="md:text-right">
