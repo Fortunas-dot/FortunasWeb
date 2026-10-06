@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>TimeWell — Scroll Check</title>
+<meta name="description" content="A 2-minute check on how much of your day the feed takes — and a personal plan to scroll less without deleting your apps." />
+<meta name="theme-color" content="#F4F2EC" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<script>
+/* ============================================================
+   CONFIG — everything you fill in lives here. Empty = switched off.
+   ============================================================ */
+window.TW_FUNNEL = {
+  // App Store page. `ct` (campaign token) shows up in App Store Connect →
+  // App Analytics → Sources, so you can see installs that came from this funnel.
+  // Add your provider token as `pt=` if you want them attributed there.
+  appStoreUrl: "https://apps.apple.com/app/id6808209242",
+  appStoreCampaign: "web-funnel",
+
+  // PostHog (same project as the app). Public project key, `phc_…`.
+  posthogKey: "",
+  posthogHost: "https://eu.i.posthog.com",
+
+  // Ad pixels — a LIST per quiz, so one quiz can feed several pixels (one per
+  // ad account or campaign). Every event below goes to every pixel listed.
+  // Add an id to the list; never replace one that live ads are optimising on.
+  metaPixelIds: ["1637640261083299"],
+  tiktokPixelIds: [],
+
+  // Server-side mirror (Meta Conversions API), same idea as the Aurora funnels:
+  // key events are sent from the browser pixel AND posted here with the same
+  // event id, so Meta counts them once and still gets them when the pixel is
+  // blocked (adblock, iOS). On fortunas.ai this is the Vercel function in
+  // FortunasWeb/api/capi.js; it does nothing until META_CAPI_ACCESS_TOKEN is set.
+  // Empty = browser pixels only.
+  capiEndpoint: "/api/capi",
+
+  // Optional: a URL that accepts POST JSON { email, answers, attribution }.
+  // When set, an email step ("send me my plan") appears before the results.
+  // When empty, the funnel skips that step entirely — no email is asked for
+  // that nothing would receive.
+  leadEndpoint: "",
+};
+</script>
+
+<!-- Click ids + UTMs, captured on landing (the funnel spans many steps and the
+     install happens on another site, so they have to outlive the landing URL). -->
+<script>
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    var keep = {};
+    ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid", "ttclid", "gclid"].forEach(function (k) {
+      var v = q.get(k);
+      if (v && v.length <= 500) keep[k] = v;
+    });
+    // Rebuild _fbc from ?fbclid= when the pixel hasn't set it yet (Safari/iOS,
+    // slow or blocked pixel) — the click id is Meta's strongest match signal.
+    if (q.get("fbclid") && !/(?:^|;\s*)_fbc=/.test(document.cookie)) {
+      document.cookie = "_fbc=fb.1." + Date.now() + "." + q.get("fbclid") + "; path=/; max-age=7776000; SameSite=Lax";
+    }
+    // TikTok / Google click ids in cookies too, so a server event can read them.
+    var ttclid = q.get("ttclid"), gclid = q.get("gclid");
+    if (ttclid && ttclid.length >= 8 && ttclid.length <= 500) document.cookie = "tw_ttclid=" + encodeURIComponent(ttclid) + "; path=/; max-age=7776000; SameSite=Lax";
+    if (gclid && /^[A-Za-z0-9._~-]{10,200}$/.test(gclid)) document.cookie = "tw_gclid=" + encodeURIComponent(gclid) + "; path=/; max-age=7776000; SameSite=Lax";
+    if (Object.keys(keep).length) {
+      keep.landed_at = new Date().toISOString();
+      localStorage.setItem("tw-funnel-attr", JSON.stringify(keep));
+    }
+  } catch (e) { /* storage blocked — attribution is best-effort */ }
+})();
+</script>
+
+<!-- PostHog / Meta / TikTok — each loads only when its id is set above. -->
+<script>
+(function () {
+  var C = window.TW_FUNNEL;
+  if (C.posthogKey) {
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once identify alias people.set people.set_once set_config reset opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_distinct_id getFeatureFlag isFeatureEnabled onFeatureFlags".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init(C.posthogKey, { api_host: C.posthogHost, person_profiles: "identified_only" });
+  }
+  if (C.metaPixelIds.length) {
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+    C.metaPixelIds.forEach(function (id) { fbq("init", id); });
+    fbq("track", "PageView"); // fbq("track") reaches every pixel initialised above
+  }
+  if (C.tiktokPixelIds.length) {
+    !function (w, d, t) {w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=r+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};C.tiktokPixelIds.forEach(function (id) { ttq.load(id); });ttq.page();}(window, document, 'ttq');
+  }
+})();
+</script>
+
+<style>
+:root {
+  --bg: #F4F2EC;
+  --surface: #FBFAF6;
+  --ink: #26241F;
+  --muted: #6B665E;
+  --line: #E2DDD0;
+  --line-strong: #C9C3B5;
+  --accent: #137A3C;
+  --accent-dark: #0E5F2E;
+  --accent-soft: #D2E7D6;
+  --accent-tint: #EAF3EC;
+  --clay: #B0492E;
+  --serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+h1, h2, p { margin: 0; }
+a { color: var(--accent); }
+button { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.funnel { overflow-x: clip; min-height: 100dvh; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; }
+
+/* ---------- header ---------- */
+.head { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: max(8px, env(safe-area-inset-top)) 20px 0; display: flex; flex-direction: column; gap: 10px; }
+.head-row { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 44px; }
+.back { width: 44px; height: 44px; margin-left: -12px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 12px; }
+.back[hidden] { visibility: hidden; display: flex; }
+.brand { display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--serif); font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
+.block-row { display: flex; align-items: center; justify-content: space-between; }
+.block-name { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.block-dots { display: flex; gap: 5px; }
+.block-dots span { width: 6px; height: 6px; border-radius: 999px; background: var(--line); transition: background .3s; }
+.block-dots span.on { background: var(--accent); }
+.progress { height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.progress .bar { height: 100%; border-radius: 999px; background: var(--accent); transition: width .35s ease; }
+
+/* ---------- screen ---------- */
+.screen { flex: 1; display: flex; flex-direction: column; }
+.content { flex: 1; padding: 26px 20px 24px; display: flex; flex-direction: column; gap: 22px; }
+.content.center { justify-content: center; }
+.step-in-right { animation: inR .32s ease both; }
+.step-in-left { animation: inL .32s ease both; }
+@keyframes inR { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes inL { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .step-in-right, .step-in-left { animation: none; } * { transition: none !important; } }
+
+.titles { display: flex; flex-direction: column; gap: 10px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent-dark); }
+.h1 { font-family: var(--serif); font-weight: 700; font-size: 30px; line-height: 1.12; letter-spacing: -0.6px; text-wrap: balance; }
+.h1.lg { font-size: 32px; }
+.sub { font-size: 15px; line-height: 22px; color: var(--muted); text-wrap: pretty; }
+.label { font-size: 14px; font-weight: 600; }
+.fine { font-size: 12px; line-height: 17px; color: var(--muted); text-align: center; }
+
+/* options */
+.opts { display: flex; flex-direction: column; gap: 10px; }
+.opt { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 12px 16px; border-radius: 16px; border: 1.5px solid var(--line); background: var(--surface); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.opt:hover { border-color: var(--line-strong); }
+.opt.sel { border-color: var(--accent); background: var(--accent-tint); }
+.opt-main { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.opt-label { font-size: 16px; font-weight: 500; }
+.opt-desc { font-size: 13px; color: var(--muted); }
+.mark { width: 22px; height: 22px; border-radius: 999px; border: 1.5px solid var(--line-strong); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.multi .mark { border-radius: 7px; }
+.sel .mark { background: var(--accent); border-color: var(--accent); }
+.mark svg { display: none; }
+.sel .mark svg { display: block; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.chip { height: 44px; padding: 0 16px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.chip.sel { border-color: var(--accent); background: var(--accent-tint); }
+.chip .tick { display: none; width: 18px; height: 18px; border-radius: 999px; background: var(--accent); align-items: center; justify-content: center; }
+.chip.sel .tick { display: flex; }
+
+.ages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.age { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; height: 156px; padding-bottom: 16px; border-radius: 20px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; overflow: hidden; }
+.age:hover { border-color: var(--accent); }
+.age.sel { border-color: var(--accent); background: var(--accent-tint); }
+.age-faces { display: flex; align-items: center; justify-content: center; padding-top: 4px; }
+.age-faces img { width: 76px; height: 76px; border-radius: 999px; object-fit: cover; border: 3px solid var(--surface); background: var(--line); }
+.age-faces img + img { margin-left: -18px; }
+.age.sel .age-faces img { border-color: var(--accent-tint); }
+.age-name { font-size: 17px; font-weight: 600; }
+
+.scale-q { font-family: var(--serif); font-weight: 600; font-size: 30px; line-height: 1.18; letter-spacing: -0.5px; text-align: center; text-wrap: balance; }
+.scale { display: flex; gap: 8px; }
+.scale button { flex: 1; height: 56px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); font-size: 17px; font-weight: 600; cursor: pointer; }
+.scale button.sel { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.scale-ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+
+.card { padding: 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+.compare { display: flex; flex-direction: column; gap: 12px; }
+.compare .card { display: flex; gap: 14px; }
+.dot { width: 10px; height: 10px; margin-top: 7px; border-radius: 999px; flex-shrink: 0; }
+.card-t { font-family: var(--serif); font-size: 19px; font-weight: 700; }
+.card-b { font-size: 15px; line-height: 22px; color: var(--muted); margin-top: 4px; }
+
+.big { display: flex; align-items: baseline; gap: 10px; }
+.big-n { font-family: var(--serif); font-weight: 700; font-size: 104px; line-height: .9; letter-spacing: -4px; color: var(--clay); }
+.big-u { font-family: var(--serif); font-size: 30px; font-weight: 600; }
+.meter { height: 14px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.meter div { height: 100%; background: var(--clay); transition: width .8s ease; }
+.meter-legend { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stat { padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.stat b { font-family: var(--serif); font-size: 24px; white-space: nowrap; font-weight: 700; letter-spacing: -0.8px; }
+.stat span { font-size: 12px; line-height: 16px; color: var(--muted); }
+.plan { padding: 4px 16px; }
+.plan-head { padding: 12px 0 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; color: var(--accent-dark); }
+.plan-row { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.plan-row b { width: 96px; flex-shrink: 0; font-weight: 600; }
+.plan-row span { color: var(--muted); line-height: 20px; }
+
+.ring-wrap { position: relative; width: 168px; height: 168px; }
+.ring-wrap circle.fg { transition: stroke-dashoffset .2s linear; }
+.ring-n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--serif); font-size: 40px; font-weight: 700; }
+.checks { display: flex; flex-direction: column; gap: 14px; align-self: stretch; padding: 0 12px; }
+.check { display: flex; align-items: center; gap: 12px; font-size: 15px; color: var(--muted); transition: color .3s; }
+.check .mark { width: 22px; height: 22px; }
+.check.done { color: var(--ink); }
+.check.done .mark { background: var(--accent); border-color: var(--accent); }
+.check.done .mark svg { display: block; }
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field input { height: 56px; padding: 0 16px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); font: inherit; font-size: 16px; color: var(--ink); }
+.field input:focus { border-color: var(--accent); outline: none; }
+.err { font-size: 13px; color: var(--clay); min-height: 18px; }
+
+/* ---------- results page ---------- */
+.res-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: max(10px, env(safe-area-inset-top)) 20px 10px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.res-bar > span { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.res-bar-btn { height: 38px; padding: 0 16px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 14px; font-weight: 600; display: flex; align-items: center; text-decoration: none; }
+.res-bar-btn:hover { background: var(--accent-dark); color: var(--surface); }
+.res { gap: 30px; }
+.res section { display: flex; flex-direction: column; gap: 14px; }
+.res section.stats { display: grid; }
+.foot.static { position: static; background: none; padding-top: 4px; }
+.res-hero { gap: 10px !important; }
+.accent { color: var(--accent); }
+.h2 { font-family: var(--serif); font-weight: 700; font-size: 23px; line-height: 1.2; letter-spacing: -0.4px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pull-n { font-family: var(--serif); font-size: 28px; font-weight: 700; }
+.pull-n small { font-size: 15px; color: var(--muted); font-weight: 600; }
+.pull-meter { position: relative; height: 12px; border-radius: 999px; background: linear-gradient(90deg, #8DBB98, #C9A13B 55%, #B0492E); margin: 0 11px; }
+.pull-dot { position: absolute; top: 50%; width: 22px; height: 22px; border-radius: 999px; background: var(--surface); border: 4px solid var(--ink); transform: translate(-50%, -50%); }
+.res .meter-legend { margin-top: 0; }
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .ax { font-family: var(--mono); font-size: 10px; fill: var(--muted); }
+.chart .tag { font-family: var(--sans); font-size: 12px; font-weight: 600; }
+.chart .tag.now { fill: var(--clay); }
+.chart .tag.goal { fill: var(--accent-dark); }
+.chart .cline { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s ease; }
+.chart .carea, .chart .cdot, .chart .tag { opacity: 0; transition: opacity .5s ease; }
+.chart .carea, .chart .tag { transition-delay: 1.1s; }
+.chart.on .cline { stroke-dashoffset: 0; }
+.chart.on .carea, .chart.on .cdot, .chart.on .tag { opacity: 1; }
+.xform { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 8px; }
+.xcard { position: relative; padding: 18px 14px 16px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); }
+.xcard.after { border: 1.5px solid var(--accent); background: var(--accent-tint); }
+.xcard-badge { position: absolute; top: -11px; left: 12px; padding: 3px 10px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 11px; font-weight: 600; }
+.xcard-t { font-family: var(--serif); font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+.xcard ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.xcard li { display: flex; gap: 8px; font-size: 13.5px; line-height: 19px; }
+.xm { width: 18px; height: 18px; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; margin-top: 1px; }
+.xm.minus { background: #F1DDD6; color: var(--clay); }
+.xm.plus { background: var(--accent); }
+.weeks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.weeks li { display: flex; gap: 14px; position: relative; padding-bottom: 18px; }
+.weeks li:last-child { padding-bottom: 0; }
+.weeks li:not(:last-child)::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 2px; width: 2px; background: var(--line); }
+.wk-n { width: 32px; height: 32px; border-radius: 999px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent-dark); font-family: var(--mono); font-size: 13px; font-weight: 500; }
+.weeks li:last-child .wk-n { background: var(--accent); color: var(--surface); }
+.weeks b { font-size: 15px; }
+.weeks p { font-size: 14px; line-height: 20px; color: var(--muted); margin-top: 2px; }
+.spend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.spend .stat:last-child:nth-child(odd) { grid-column: span 2; }
+.shots { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -20px; padding: 2px 20px 8px; scrollbar-width: none; }
+.shots::-webkit-scrollbar { display: none; }
+.shots figure { margin: 0; flex: 0 0 62%; scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; }
+.shots img { width: 100%; height: auto; border-radius: 20px; border: 1px solid var(--line); display: block; }
+.shots figcaption { font-size: 13px; line-height: 18px; color: var(--muted); }
+.shots figcaption b { display: block; color: var(--ink); font-size: 14px; }
+.res .privacy { flex-direction: row; gap: 14px; align-items: flex-start; }
+.privacy-ic { width: 40px; height: 40px; border-radius: 999px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.faq { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary { list-style: none; cursor: pointer; padding: 16px 28px 16px 0; font-size: 15px; font-weight: 600; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 2px; top: 13px; font-size: 20px; font-weight: 400; color: var(--muted); }
+.faq details[open] summary::after { content: "–"; }
+.faq p { font-size: 14px; line-height: 21px; color: var(--muted); padding-bottom: 16px; }
+
+/* ---------- footer CTA ---------- */
+.foot { position: sticky; bottom: 0; padding: 12px 20px max(24px, env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 78%, rgba(244,242,236,0)); display: flex; flex-direction: column; gap: 10px; }
+.cta { height: 56px; border: 0; border-radius: 16px; background: var(--accent); color: var(--surface); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; transition: background .15s; }
+.cta:hover { background: var(--accent-dark); color: var(--surface); }
+.cta:disabled { background: #BFD5C4; cursor: default; }
+.link-btn { border: 0; background: transparent; color: var(--muted); font-size: 14px; font-weight: 500; height: 40px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="funnel" id="app"></div>
+
+<script>
+(function () {
+  "use strict";
+  var C = window.TW_FUNNEL;
+  var SAVE_KEY = "tw-funnel-v1";
+  var CHECK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FBFAF6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  var LOGO = '<svg width="22" height="22" viewBox="0 0 28 28" fill="none" aria-hidden="true"><circle cx="14" cy="14" r="11" stroke="#E2DDD0" stroke-width="4"/><path d="M14 3a11 11 0 0 1 9.53 16.5" stroke="#137A3C" stroke-width="4" stroke-linecap="round"/></svg>';
+  var APPLE = '<svg width="17" height="20" viewBox="0 0 16 19" fill="#FBFAF6" aria-hidden="true"><path d="M13.2 10.1c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.2 2C1.8 9.9 2.9 13.6 4.2 15.6c.6 1 1.4 2.1 2.4 2 .9 0 1.3-.6 2.4-.6s1.4.6 2.4.6c1 0 1.6-1 2.2-2 .7-1.1 1-2.2 1-2.3 0 0-2-.8-2-3.2zM11.3 3.9c.5-.6.9-1.5.8-2.4-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.8-.5 2.3-1.2z"/></svg>';
+
+  /* ============================================================
+     The questions. Three blocks, each with its own progress bar.
+     ============================================================ */
+  var AGES = [
+    // Portraits come from the Aurora quiz (assets/ages/), cropped to faces.
+    { v: "18-29", label: "18–29", mid: 24, file: "18-29" },
+    { v: "30-39", label: "30–39", mid: 35, file: "30-39" },
+    { v: "40-49", label: "40–49", mid: 45, file: "40-49" },
+    { v: "50+",   label: "50+",   mid: 57, file: "50plus" },
+  ];
+  var HOURS = [
+    { v: "lt2", label: "Under 2 hours", h: 1.5 },
+    { v: "2-4", label: "2–4 hours", h: 3 },
+    { v: "4-6", label: "4–6 hours", h: 5 },
+    { v: "6-8", label: "6–8 hours", h: 7 },
+    { v: "8+",  label: "More than 8 hours", h: 9 },
+  ];
+  var APPS = ["Instagram", "TikTok", "YouTube", "X", "Facebook", "Snapchat", "Reddit"];
+  var PULLS = [
+    { v: "short", label: "Short videos", desc: "Reels, Shorts, TikTok" },
+    { v: "feed", label: "The algorithmic feed", desc: "For You, Explore, suggested posts" },
+    { v: "counts", label: "Likes and view counts", desc: "Checking how a post is doing" },
+    { v: "notifs", label: "Notifications", desc: "One ping and I'm in for 20 minutes" },
+  ];
+  var WHEN = [
+    { v: "wake", label: "Right after I wake up" },
+    { v: "work", label: "During work or study" },
+    { v: "evening", label: "In the evening" },
+    { v: "bed", label: "In bed, before sleep" },
+    { v: "always", label: "Honestly, all day" },
+  ];
+  var TRIGGERS = [
+    { v: "bored", label: "Boredom", desc: "Any gap longer than ten seconds" },
+    { v: "stress", label: "Stress or avoiding something", desc: "Opening an app instead of starting the task" },
+    { v: "habit", label: "Pure habit", desc: "My thumb gets there before I decide" },
+    { v: "fomo", label: "Fear of missing out", desc: "What did everyone post?" },
+  ];
+  var TRIED = [
+    { v: "delete", label: "Deleted the apps", desc: "And reinstalled them" },
+    { v: "limits", label: "Screen Time limits", desc: "And tapped “Ignore limit”" },
+    { v: "blocker", label: "An app blocker", desc: "Then turned it off to reply to a friend" },
+    { v: "none", label: "Nothing yet" },
+  ];
+  var TIMEBACK = [
+    { v: "sleep", label: "Sleep better" },
+    { v: "read", label: "Read more" },
+    { v: "move", label: "Move, train, get outside" },
+    { v: "people", label: "Be present with people" },
+    { v: "project", label: "Finish a project" },
+    { v: "focus", label: "Focus at work or school" },
+  ];
+  var TARGET = [
+    { v: "25", label: "Cut it by a quarter", desc: "A gentle start", f: 0.25, by: "by a quarter" },
+    { v: "50", label: "Cut it in half", desc: "Half the scroll, all of the messages", f: 0.5, by: "in half" },
+    { v: "75", label: "Cut three quarters", desc: "Keep the messages, lose nearly all the feed", f: 0.75, by: "by three quarters" },
+  ];
+  var AGREE = {
+    auto: "I open social apps without deciding to.",
+    losttrack: "I lose track of time while scrolling.",
+    worse: "I feel worse after scrolling than before.",
+  };
+
+  // What TimeWell actually removes per platform (docs/marketing-copy.md). Apps it
+  // doesn't filter get the Screen Time shield + a daily limit, which the app has.
+  var STRIPS = {
+    Instagram: "Reels, Explore and suggested posts — opens on Following",
+    YouTube: "The Shorts shelf and the Shorts tab",
+    X: "For You, Trends and Who to follow",
+    Facebook: "Suggested posts and People You May Know",
+  };
+  // TikTok, Reddit and Snapchat are "Coming soon" in the app's Browse tab; until
+  // then the app can still shield them with Screen Time and a daily limit.
+  var SOON = "Filters coming soon — until then, blocked with Screen Time or a daily limit";
+
+  /* ---------- results page content ---------- */
+  // The profile comes from what starts their scroll — their own answer, named.
+  var PROFILES = {
+    bored: { name: "the Gap Filler", blurb: "Any spare ten seconds becomes a feed. Not because you chose it — because the feed is always one tap away and it never ends." },
+    stress: { name: "the Escape Scroller", blurb: "When something feels heavy, the feed is the quickest way out. It works for a minute — then the thing is still there and an hour is gone." },
+    habit: { name: "the Autopilot Scroller", blurb: "Your thumb opens the app before you decide to. The habit runs itself, which is exactly why willpower alone keeps losing." },
+    fomo: { name: "the Catch-Up Scroller", blurb: "You open the app to see what friends posted — and the algorithm keeps you there long after you've seen it." },
+  };
+  var NOW_WHEN = {
+    wake: "Mornings start in the feed",
+    work: "Work keeps getting interrupted",
+    evening: "Evenings disappear into the feed",
+    bed: "Scrolling in bed, sleeping later",
+    always: "Reaching for the phone all day",
+  };
+  var AFTER_WHEN = {
+    wake: "Mornings that start on your terms",
+    work: "Focus sessions that pause the feeds",
+    evening: "Evenings back, apps shut by Sleep mode",
+    bed: "Sleep mode shuts the apps overnight",
+    always: "Per-app limits and a daily goal",
+  };
+  var NOW_PULL = {
+    short: "Reels and Shorts you never chose",
+    feed: "An algorithm deciding what you see",
+    counts: "Checking likes and view counts",
+    notifs: "Pulled in by every ping",
+  };
+  var AFTER_PULL = {
+    short: "No Reels, no Shorts",
+    feed: "Following only — people you chose",
+    counts: "No like or view counts",
+  };
+  // Share of the cut reached by the end of each week (Today, W1–W4).
+  var WEEK_CURVE = [0, 0.4, 0.65, 0.85, 1];
+  // Plain arithmetic on the hours they would get back.
+  var SPEND = {
+    read: function (d, y) { return [Math.round(y / 7), "books, at about 7 hours each"]; },
+    move: function (d, y) { return [fmtShort(d * 7), "a week to move, train or get outside"]; },
+    sleep: function (d, y) { return [fmtShort(Math.min(d, 1.5)), "earlier to bed, every night"]; },
+    people: function (d, y) { return [Math.round(y / 3), "evenings out with people"]; },
+    project: function (d, y) { return [Math.round(y / 40), "full work weeks for your project"]; },
+    focus: function (d, y) { return [Math.round(y / 8), "extra focused workdays"]; },
+  };
+  var SHOTS = [
+    ["shot-browse.jpg", "Browse", "Your apps, with the feeds filtered out."],
+    ["shot-filter.jpg", "Filter", "Choose exactly what disappears."],
+    ["shot-focus.jpg", "Focus", "Sessions and a nightly sleep window."],
+    ["shot-today.jpg", "Today", "Screen time against your daily goal."],
+  ];
+  var FAQ = [
+    ["Is this another app blocker?", "No. Blocking takes the good parts away too, so it rarely lasts. TimeWell removes only the addictive sections — Reels, Shorts, For You, Explore, suggested posts — and keeps your messages, profiles and the people you follow."],
+    ["How does it work?", "You open Instagram, YouTube, X or Facebook inside TimeWell. The sections you switch off are gone before the page even shows. Every filter flips on or off in a second."],
+    ["What about TikTok, Reddit and Snapchat?", "Filters for them are coming soon. Until then, TimeWell can block them with Apple's Screen Time and give them a daily limit."],
+    ["Will I miss messages from friends?", "No. DMs, profiles and posts from people you follow all stay — only the endless part goes."],
+    ["Does it work on Android?", "Not yet. TimeWell is for iPhone."],
+  ];
+
+  /* Blocks: [from, to] inclusive step indices. */
+  var BLOCKS = [
+    { name: "You", from: 0, to: 3 },
+    { name: "Your habits", from: 4, to: 11 },
+    { name: "Your goals", from: 12, to: 13 },
+  ];
+
+  /* The step list. `kind` decides the renderer. */
+  var STEPS = [
+    { id: "age", kind: "age" },
+    { id: "hours", kind: "single", key: "hours", eyebrow: "Be honest — nobody's watching", title: "On an average day, how long are you on your phone?", sub: "Not sure? Check Settings → Screen Time.", items: HOURS },
+    { id: "apps", kind: "apps" },
+    { id: "pulls", kind: "multi", key: "pulls", eyebrow: "Choose all that apply", title: "Which part pulls you in?", items: PULLS },
+    { id: "projection", kind: "projection" },
+    { id: "agree_auto", kind: "scale", key: "auto" },
+    { id: "agree_losttrack", kind: "scale", key: "losttrack" },
+    { id: "when", kind: "single", key: "when", eyebrow: "Your pattern", title: "When do you scroll the most?", items: WHEN },
+    { id: "trigger", kind: "single", key: "trigger", eyebrow: "Your pattern", title: "What usually starts a scroll?", items: TRIGGERS },
+    { id: "agree_worse", kind: "scale", key: "worse" },
+    { id: "tried", kind: "multi", key: "tried", eyebrow: "Choose all that apply", title: "What have you tried to cut back?", items: TRIED, exclusive: "none" },
+    { id: "why", kind: "why" },
+    { id: "timeback", kind: "multi", key: "timeback", eyebrow: "Choose all that apply", title: "What would you do with the time back?", items: TIMEBACK },
+    { id: "target", kind: "single", key: "target", eyebrow: "Your goal", title: "How much of your phone time do you want back?", items: TARGET },
+    { id: "email", kind: "email", optional: true },
+    { id: "loader", kind: "loader" },
+    { id: "result", kind: "result" },
+  ];
+  // No lead endpoint → nothing would receive the email, so the step isn't shown.
+  if (!C.leadEndpoint) STEPS = STEPS.filter(function (s) { return s.id !== "email"; });
+  var QUIZ_END = STEPS.findIndex(function (s) { return s.kind === "email" || s.kind === "loader"; });
+  var LOADER = STEPS.findIndex(function (s) { return s.kind === "loader"; });
+
+  /* ============================================================
+     State — saved on every change, so a reload resumes the quiz.
+     ============================================================ */
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) {}
+  var state = {
+    step: Math.min(saved.step || 0, STEPS.length - 1),
+    answers: saved.answers || {},
+    dir: "right",
+  };
+  // Resuming onto the loader would replay it from 0% — land on the results instead.
+  if (state.step === LOADER) state.step = LOADER + 1;
+  var timer = null;
+
+  function save() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify({ step: state.step, answers: state.answers })); } catch (e) {}
+  }
+  function attribution() {
+    try { return JSON.parse(localStorage.getItem("tw-funnel-attr")) || {}; } catch (e) { return {}; }
+  }
+
+  /* ============================================================
+     Tracking — one call fans out to whatever is configured.
+     ============================================================ */
+  function track(event, props) {
+    props = props || {};
+    try { if (window.posthog && C.posthogKey) posthog.capture(event, props); } catch (e) {}
+  }
+  function genEventId() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+    return "evt_" + Date.now() + "_" + Math.random().toString(16).slice(2);
+  }
+  function getCookie(name) {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  // A stable anonymous id per visitor — sent hashed as external_id for matching.
+  function visitorId() {
+    var v = "";
+    try { v = localStorage.getItem("tw-funnel-vid") || ""; } catch (e) {}
+    if (!v) {
+      v = genEventId();
+      try { localStorage.setItem("tw-funnel-vid", v); } catch (e) {}
+    }
+    return v;
+  }
+  /*
+   * One conversion, everywhere at once: the Meta pixel (every id in the config),
+   * the TikTok pixel, and the server mirror — all with the SAME event id, which
+   * is what lets Meta and TikTok drop the duplicate. Mirrors Aurora's
+   * fbqTrack + ttqTrack + sendCapi trio.
+   */
+  function convert(metaEvent, tiktokEvent, custom) {
+    var id = genEventId();
+    custom = custom || {};
+    try { if (window.fbq && C.metaPixelIds.length) fbq("track", metaEvent, custom, { eventID: id }); } catch (e) {}
+    try {
+      if (window.ttq && C.tiktokPixelIds.length && tiktokEvent) {
+        ttq.track(tiktokEvent, Object.assign({ contents: [{ content_id: "timewell", content_type: "product", content_name: "TimeWell" }] }, custom), { event_id: id });
+      }
+    } catch (e) {}
+    if (C.capiEndpoint && C.metaPixelIds.length) {
+      try {
+        fetch(C.capiEndpoint, {
+          method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+          body: JSON.stringify({
+            event_name: metaEvent, event_id: id, pixel_ids: C.metaPixelIds,
+            email: state.answers.email || "", external_id: visitorId(),
+            fbp: getCookie("_fbp"), fbc: getCookie("_fbc"),
+            custom_data: custom, event_source_url: location.href,
+          }),
+        }).catch(function () {});
+      } catch (e) {}
+    }
+  }
+  function trackStep() {
+    var s = STEPS[state.step];
+    track("funnel_step", { step: s.id, position: state.step, funnel: "scroll-check" });
+  }
+  // Last step seen when the tab is closed or backgrounded = the drop-off point.
+  function onLeave() { track("funnel_leave", { step: STEPS[state.step].id, position: state.step, funnel: "scroll-check" }); }
+  window.addEventListener("pagehide", onLeave);
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") onLeave(); });
+
+  /* ============================================================
+     Navigation
+     ============================================================ */
+  function go(n) {
+    clearTimeout(timer);
+    state.dir = n >= state.step ? "right" : "left";
+    state.step = Math.max(0, Math.min(n, STEPS.length - 1));
+    save();
+    render();
+    trackStep();
+    window.scrollTo(0, 0);
+  }
+  function next() { go(state.step + 1); }
+  function back() {
+    var t = state.step - 1;
+    if (t === LOADER) t--; // never back into the loader
+    go(t);
+  }
+  function set(key, val) { state.answers[key] = val; save(); }
+  // Single-select: show the tick land, then turn the page.
+  function pick(key, val) {
+    set(key, val);
+    render(true);
+    clearTimeout(timer);
+    timer = setTimeout(next, 260);
+  }
+
+  /* ============================================================
+     Numbers — everything shown is computed from the answers.
+     ============================================================ */
+  function find(list, v) { for (var i = 0; i < list.length; i++) if (list[i].v === v) return list[i]; return null; }
+  function hoursPerDay() { var h = find(HOURS, state.answers.hours); return h ? h.h : 3; }
+  function ageMid() { var a = find(AGES, state.answers.age); return a ? a.mid : 30; }
+  function lifetimeYears() { return hoursPerDay() * Math.max(80 - ageMid(), 10) / 24; }
+  function targetFrac() { var t = find(TARGET, state.answers.target); return t ? t.f : 0.5; }
+  function fmtH(h) {
+    var m = Math.round(h * 60), hh = Math.floor(m / 60), mm = m % 60;
+    return hh && mm ? hh + " h " + mm + " m" : hh ? hh + " h" : mm + " m";
+  }
+  // Tight form for the stat tiles, where "1 h 15 m" would wrap.
+  function fmtShort(h) {
+    var m = Math.round(h * 60), hh = Math.floor(m / 60), mm = m % 60;
+    return hh && mm ? hh + "h" + (mm < 10 ? "0" : "") + mm : hh ? hh + "h" : mm + "m";
+  }
+  // Average of the three agree statements (1–5), as a score out of 10.
+  function pullScore() {
+    var v = ["agree_auto", "agree_losttrack", "agree_worse"].map(function (k) { return state.answers[k]; }).filter(Boolean);
+    if (!v.length) return 6;
+    return Math.round(v.reduce(function (x, y) { return x + y; }, 0) / v.length * 2);
+  }
+  // Week-by-week line: Today → Week 4, from their hours down to their goal.
+  function chartSvg(wk, h) {
+    var W = 320, H = 196, L = 38, R = 18, T = 30, B = 34;
+    var top = Math.ceil(h), xs = wk.map(function (_, i) { return L + i * (W - L - R) / (wk.length - 1); });
+    var y = function (v) { return T + (1 - v / top) * (H - T - B); };
+    var d = "M" + xs[0] + " " + y(wk[0]).toFixed(1);
+    for (var i = 1; i < wk.length; i++) {
+      var dx = (xs[i] - xs[i - 1]) / 2;
+      d += " C " + (xs[i - 1] + dx) + " " + y(wk[i - 1]).toFixed(1) + ", " + (xs[i] - dx) + " " + y(wk[i]).toFixed(1) + ", " + xs[i] + " " + y(wk[i]).toFixed(1);
+    }
+    var area = d + " L " + xs[xs.length - 1] + " " + (H - B) + " L " + xs[0] + " " + (H - B) + " Z";
+    var grid = [0, 0.5, 1].map(function (k) {
+      var v = top * k, yy = y(v).toFixed(1);
+      return '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="#E2DDD0" stroke-width="1"/>' +
+        '<text x="' + (L - 8) + '" y="' + (+yy + 4) + '" text-anchor="end" class="ax">' + (Math.round(v * 10) / 10) + 'h</text>';
+    }).join("");
+    var labels = ["Today", "Wk 1", "Wk 2", "Wk 3", "Wk 4"].map(function (t, i) { return '<text x="' + xs[i] + '" y="' + (H - 10) + '" text-anchor="middle" class="ax">' + t + '</text>'; }).join("");
+    var last = wk.length - 1;
+    var dots = wk.map(function (v, i) {
+      var c = i === 0 ? "#B0492E" : i === last ? "#137A3C" : "#C9C3B5";
+      return '<circle class="cdot" style="transition-delay:' + (0.4 + i * 0.18) + 's" cx="' + xs[i] + '" cy="' + y(v).toFixed(1) + '" r="' + (i === 0 || i === last ? 7 : 5) + '" fill="#FBFAF6" stroke="' + c + '" stroke-width="4"/>';
+    }).join("");
+    var tags = '<text x="' + xs[0] + '" y="' + (y(wk[0]) - 14).toFixed(1) + '" text-anchor="start" class="tag now">Now ' + fmtShort(wk[0]) + '</text>' +
+      '<text x="' + xs[last] + '" y="' + (y(wk[last]) - 14).toFixed(1) + '" text-anchor="end" class="tag goal">Goal ' + fmtShort(wk[last]) + '</text>';
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Daily phone time falling from ' + fmtH(wk[0]) + ' today to ' + fmtH(wk[last]) + ' in week 4">' +
+      '<defs><linearGradient id="cl" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#B0492E"/><stop offset=".55" stop-color="#C9A13B"/><stop offset="1" stop-color="#137A3C"/></linearGradient>' +
+      '<linearGradient id="ca" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#137A3C" stop-opacity=".14"/><stop offset="1" stop-color="#137A3C" stop-opacity="0"/></linearGradient></defs>' +
+      grid + '<path d="' + area + '" fill="url(#ca)" class="carea"/>' +
+      '<path d="' + d + '" pathLength="1" fill="none" stroke="url(#cl)" stroke-width="5" stroke-linecap="round" class="cline"/>' +
+      dots + tags + labels + '</svg>';
+  }
+  function fmt1(n) { return (Math.round(n * 10) / 10).toString(); }
+
+  /* ============================================================
+     Rendering — small string templates, one per kind of screen.
+     ============================================================ */
+  var app = document.getElementById("app");
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function header() {
+    var s = state.step;
+    if (s >= QUIZ_END) return "";
+    var bi = BLOCKS.findIndex(function (b) { return s >= b.from && s <= b.to; });
+    var b = BLOCKS[bi];
+    var pct = Math.round(((s - b.from + 1) / (b.to - b.from + 1)) * 100);
+    var dots = BLOCKS.map(function (_, i) { return '<span class="' + (i <= bi ? "on" : "") + '"></span>'; }).join("");
+    return '<header class="head">' +
+      '<div class="head-row">' +
+        '<button class="back" data-act="back" aria-label="Back"' + (s === 0 ? " hidden" : "") + '><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#26241F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>' +
+        '<span class="brand">' + LOGO + 'TimeWell</span><span></span>' +
+      '</div>' +
+      '<div class="block-row"><span class="block-name">' + b.name + ' · ' + (bi + 1) + ' of ' + BLOCKS.length + '</span><span class="block-dots">' + dots + '</span></div>' +
+      '<div class="progress" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100"><div class="bar" style="width:' + pct + '%"></div></div>' +
+    '</header>';
+  }
+
+  function titles(eyebrow, title, sub, lg) {
+    return '<div class="titles">' +
+      (eyebrow ? '<span class="eyebrow">' + eyebrow + '</span>' : "") +
+      '<h1 class="h1' + (lg ? " lg" : "") + '">' + title + '</h1>' +
+      (sub ? '<p class="sub">' + sub + '</p>' : "") +
+    '</div>';
+  }
+  function optList(items, isSel, act, key, multi) {
+    return '<div class="opts' + (multi ? " multi" : "") + '">' + items.map(function (o) {
+      var sel = isSel(o.v);
+      return '<button class="opt' + (sel ? " sel" : "") + '" data-act="' + act + '" data-key="' + key + '" data-v="' + esc(o.v) + '" aria-pressed="' + sel + '">' +
+        '<span class="opt-main"><span class="opt-label">' + o.label + '</span>' + (o.desc ? '<span class="opt-desc">' + o.desc + '</span>' : "") + '</span>' +
+        '<span class="mark">' + CHECK + '</span></button>';
+    }).join("") + '</div>';
+  }
+  function foot(label, disabled, extra) {
+    return '<div class="foot"><button class="cta" data-act="next"' + (disabled ? " disabled" : "") + '>' + label + '</button>' + (extra || "") + '</div>';
+  }
+  function listOf(key) { return state.answers[key] || []; }
+
+  var VIEWS = {
+    age: function () {
+      var cards = AGES.map(function (a) {
+        return '<button class="age' + (state.answers.age === a.v ? " sel" : "") + '" data-act="pick" data-key="age" data-v="' + a.v + '">' +
+          '<span class="age-faces" aria-hidden="true"><img src="assets/ages/female-' + a.file + '.jpg" alt="" width="76" height="76" /><img src="assets/ages/male-' + a.file + '.jpg" alt="" width="76" height="76" /></span>' +
+          '<span class="age-name">' + a.label + '</span></button>';
+      }).join("");
+      return '<div class="content">' +
+        titles("2-minute scroll check", "How much of your day is the feed taking?", "Answer 12 quick questions and get your personal plan to scroll less — without deleting your apps.", true) +
+        '<div class="titles"><span class="label">Start with your age</span><div class="ages">' + cards + '</div></div>' +
+        '<p class="fine">By continuing you agree to our <a href="/timewell/privacy">Privacy Policy</a>.</p>' +
+      '</div>';
+    },
+    single: function (s) {
+      return '<div class="content">' + titles(s.eyebrow, s.title, s.sub) +
+        optList(s.items, function (v) { return state.answers[s.key] === v; }, "pick", s.key) + '</div>';
+    },
+    multi: function (s) {
+      var sel = listOf(s.key);
+      return '<div class="content">' + titles(s.eyebrow, s.title, s.sub) +
+        optList(s.items, function (v) { return sel.indexOf(v) !== -1; }, "toggle", s.key, true) + '</div>' +
+        foot("Continue", !sel.length);
+    },
+    apps: function () {
+      var sel = listOf("apps");
+      var chips = APPS.map(function (a) {
+        var on = sel.indexOf(a) !== -1;
+        return '<button class="chip' + (on ? " sel" : "") + '" data-act="toggle" data-key="apps" data-v="' + a + '" aria-pressed="' + on + '"><span class="tick">' + CHECK.replace(/13/g, "11") + '</span>' + a + '</button>';
+      }).join("");
+      return '<div class="content">' + titles("Choose all that apply", "Which apps eat most of your time?") +
+        '<div class="chips">' + chips + '</div></div>' + foot("Continue", !sel.length);
+    },
+    scale: function (s) {
+      var v = state.answers["agree_" + s.key];
+      var btns = [1, 2, 3, 4, 5].map(function (n) {
+        return '<button class="' + (v === n ? "sel" : "") + '" data-act="scale" data-key="agree_' + s.key + '" data-v="' + n + '" aria-label="' + n + ' of 5">' + n + '</button>';
+      }).join("");
+      return '<div class="content">' +
+        '<span class="eyebrow">How much do you agree?</span>' +
+        '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:36px;padding-bottom:48px">' +
+          '<h1 class="scale-q">“' + AGREE[s.key] + '”</h1>' +
+          '<div style="display:flex;flex-direction:column;gap:10px"><div class="scale">' + btns + '</div>' +
+          '<div class="scale-ends"><span>Not at all</span><span>Completely</span></div></div>' +
+        '</div></div>';
+    },
+    projection: function () {
+      var h = hoursPerDay(), age = ageMid(), yrs = lifetimeYears();
+      var pct = Math.round(h / 16 * 100);
+      return '<div class="content center">' +
+        '<span class="eyebrow">Here\'s the math</span>' +
+        '<h1 class="h1">At this pace, your phone gets</h1>' +
+        '<div class="big"><span class="big-n" data-count="' + fmt1(yrs) + '">0</span><span class="big-u">years</span></div>' +
+        '<p style="font-size:17px;line-height:25px">of the rest of your life. Not hours — years.</p>' +
+        '<div class="card"><div class="meter"><div style="width:0" data-w="' + pct + '%"></div></div>' +
+          '<div class="meter-legend"><span>' + fmtH(h) + ' of your 16 waking hours</span><span>age ' + age + ' → 80</span></div></div>' +
+        '<p class="sub">The good news: most of it isn\'t messages or friends. It\'s the feed — and that\'s the part TimeWell removes.</p>' +
+      '</div>' + foot("That's a lot. Continue");
+    },
+    why: function () {
+      var rows = [
+        ["Blocking", "Takes the DMs and friends away too, so you turn it off by day three.", "var(--clay)"],
+        ["TimeWell", "Removes Reels, Shorts, Explore and For You. Messages, profiles and the people you follow stay.", "var(--accent)"],
+      ].map(function (r) {
+        return '<div class="card"><span class="dot" style="background:' + r[2] + '"></span><div><div class="card-t">' + r[0] + '</div><div class="card-b">' + r[1] + '</div></div></div>';
+      }).join("");
+      var tried = listOf("tried").filter(function (v) { return v !== "none"; });
+      var eyebrow = tried.length ? "It wasn't your willpower" : "You're not the problem";
+      return '<div class="content">' + titles(eyebrow, "Blocking apps doesn't stick. Removing the hook does.", "You don't have a social media problem. You have a Reels problem, a Shorts problem, a “suggested for you” problem.") +
+        '<div class="compare">' + rows + '</div></div>' + foot("Makes sense");
+    },
+    email: function () {
+      var v = state.answers.email || "";
+      return '<div class="content">' + titles("Almost there", "Where should we send your plan?", "We'll email your plan so you have it when the app is installed. No spam — unsubscribe in one tap.") +
+        '<form class="field" id="emailForm" novalidate><label class="label" for="email">Email</label>' +
+        '<input id="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="' + esc(v) + '" />' +
+        '<span class="err" id="emailErr"></span></form></div>' +
+        '<div class="foot"><button class="cta" data-act="email">Show my plan</button><button class="link-btn" data-act="next">Skip</button></div>';
+    },
+    loader: function () {
+      var items = ["Reading your answers", "Matching filters to your apps", "Building your 4-week plan"];
+      return '<div class="content center" style="align-items:center;gap:34px;padding-top:60px">' +
+        '<div class="ring-wrap"><svg width="168" height="168" viewBox="0 0 168 168" aria-hidden="true"><circle cx="84" cy="84" r="72" fill="none" stroke="#E2DDD0" stroke-width="12"/><circle class="fg" id="ring" cx="84" cy="84" r="72" fill="none" stroke="#137A3C" stroke-width="12" stroke-linecap="round" stroke-dasharray="452.4" stroke-dashoffset="452.4" transform="rotate(-90 84 84)"/></svg><span class="ring-n" id="ringN" aria-live="polite">0%</span></div>' +
+        '<h1 class="h1" style="font-size:26px;text-align:center">Building your plan…</h1>' +
+        '<div class="checks">' + items.map(function (t, i) { return '<div class="check" id="chk' + i + '"><span class="mark">' + CHECK.replace(/13/g, "12") + '</span>' + t + '</div>'; }).join("") + '</div>' +
+      '</div>';
+    },
+    result: function () {
+      var a = state.answers;
+      var h = hoursPerDay(), back = h * targetFrac(), goal = h - back, perYear = back * 365, days = Math.round(perYear / 24);
+      var apps = listOf("apps"), pulls = listOf("pulls"), timeback = listOf("timeback");
+      var prof = PROFILES[a.trigger] || PROFILES.habit;
+      var pull = pullScore();
+      var url = esc(storeUrl());
+
+      // What gets switched off — only what the app really does today.
+      var rows = [];
+      apps.forEach(function (x) { rows.push([x, STRIPS[x] || SOON]); });
+      if (pulls.indexOf("counts") !== -1) rows.push(["Everywhere", "Likes, views and follower counts hidden"]);
+      if (pulls.indexOf("feed") !== -1) rows.push(["Everywhere", "Every app opens on Following, not For You"]);
+      if (a.when === "bed" || a.when === "evening") rows.push(["Every night", "Sleep mode shuts the apps until morning"]);
+      rows.push(["Every day", "A " + fmtH(goal) + " goal, a streak and focus sessions"]);
+
+      // Now vs. with TimeWell, built from their own answers.
+      var now = [fmtH(h) + " a day on your phone"];
+      var after = [fmtH(goal) + " a day — the rest is yours"];
+      if (NOW_WHEN[a.when]) now.push(NOW_WHEN[a.when]);
+      if (AFTER_WHEN[a.when]) after.push(AFTER_WHEN[a.when]);
+      pulls.slice(0, 2).forEach(function (p) { now.push(NOW_PULL[p]); if (AFTER_PULL[p]) after.push(AFTER_PULL[p]); });
+      after.push("Messages, friends and profiles stay");
+
+      // The four weeks, as actions the plan takes — not outcomes it promises.
+      // Rounded to 5 minutes: a goal of "3 h 25 m" reads as a plan, "3 h 23 m" as noise.
+      var wk = WEEK_CURVE.map(function (k) { return Math.round((h - back * k) * 12) / 12; });
+      var weeks = [
+        ["Week 1", "Filters on. " + (apps.some(function (x) { return STRIPS[x]; }) ? "Reels, Shorts and the For You feeds are gone from day one." : "The addictive sections are gone from day one.") + " Daily goal: " + fmtH(wk[1]) + "."],
+        ["Week 2", (a.when === "work" ? "Focus sessions during work hours" : a.when === "bed" || a.when === "evening" ? "Sleep mode on in the evenings" : "Focus sessions when the pull is strongest") + ". Goal: " + fmtH(wk[2]) + "."],
+        ["Week 3", "Per-app limits tighten to " + fmtH(wk[3]) + " a day in total."],
+        ["Week 4", "At your goal: " + fmtH(goal) + " a day, " + fmtH(back) + " back every day."],
+      ];
+
+      // What the hours add up to, for the goals they picked.
+      var spend = timeback.map(function (g) { return SPEND[g] && SPEND[g](back, perYear); }).filter(Boolean).slice(0, 4);
+
+      return '<div class="res-bar"><span>' + LOGO + '<b>Your plan is ready</b></span><a class="res-bar-btn" data-act="download" href="' + url + '">Get the app</a></div>' +
+      '<div class="content res">' +
+
+        // 1 — profile
+        '<section class="res-hero">' +
+          '<span class="eyebrow">Your scroll profile</span>' +
+          '<h1 class="h1 lg">You\'re <span class="accent">' + prof.name + '</span></h1>' +
+          '<p class="sub">' + prof.blurb + '</p>' +
+        '</section>' +
+
+        // 2 — pull of the feed
+        '<section class="card">' +
+          '<div class="row-between"><span class="label">How hard the feed pulls you</span><b class="pull-n">' + pull + '<small>/10</small></b></div>' +
+          '<div class="pull-meter"><span class="pull-dot" style="left:' + (pull * 10) + '%"></span></div>' +
+          '<div class="meter-legend"><span>Light</span><span>Moderate</span><span>Strong</span></div>' +
+          '<p class="card-b">' + (pull >= 7 ? "The feed is doing what it was built to do — and it is winning most days. That's the design, not a flaw in you." : pull >= 4 ? "The feed gets you more often than you'd like. Removing the endless part is usually enough to tip it back." : "You're mostly in control — the feed still takes more hours than it gives back.") + '</p>' +
+        '</section>' +
+
+        // 3 — numbers
+        '<section class="stats">' +
+          '<div class="stat"><b>' + fmtShort(h) + '</b><span>a day on your phone now</span></div>' +
+          '<div class="stat"><b>' + fmtShort(goal) + '</b><span>your daily goal</span></div>' +
+          '<div class="stat"><b>' + days + '</b><span>full days back a year</span></div>' +
+        '</section>' +
+
+        // 4 — the graph
+        '<section class="card chart-card">' +
+          '<div class="row-between"><span class="label">Your daily phone time, week by week</span></div>' +
+          chartSvg(wk, h) +
+          '<p class="fine" style="text-align:left">The pace your plan sets — results depend on you. Hours are your own estimate from this quiz.</p>' +
+        '</section>' +
+
+        // 5 — now vs with TimeWell
+        '<section>' +
+          '<h2 class="h2">The difference, in your words</h2>' +
+          '<div class="xform">' +
+            '<div class="xcard before"><div class="xcard-t">Now</div><ul>' + now.map(function (t) { return '<li><span class="xm minus">–</span>' + esc(t) + '</li>'; }).join("") + '</ul></div>' +
+            '<div class="xcard after"><div class="xcard-badge">With TimeWell</div><div class="xcard-t">Goal</div><ul>' + after.map(function (t) { return '<li><span class="xm plus">' + CHECK.replace(/13/g, "10") + '</span>' + esc(t) + '</li>'; }).join("") + '</ul></div>' +
+          '</div>' +
+        '</section>' +
+
+        // 6 — four weeks
+        '<section>' +
+          '<h2 class="h2">Your 4-week path</h2>' +
+          '<ol class="weeks">' + weeks.map(function (w, i) { return '<li><span class="wk-n">' + (i + 1) + '</span><div><b>' + w[0] + '</b><p>' + esc(w[1]) + '</p></div></li>'; }).join("") + '</ol>' +
+        '</section>' +
+
+        // 7 — switched off
+        '<section class="card plan"><p class="plan-head">What TimeWell switches off for you</p>' +
+          rows.map(function (r) { return '<div class="plan-row"><b>' + esc(r[0]) + '</b><span>' + esc(r[1]) + '</span></div>'; }).join("") +
+        '</section>' +
+
+        // 8 — what the time becomes
+        (spend.length ? '<section><h2 class="h2">' + Math.round(perYear).toLocaleString("en-US") + ' hours a year could be</h2><div class="spend">' +
+          spend.map(function (s) { return '<div class="stat"><b>' + s[0] + '</b><span>' + s[1] + '</span></div>'; }).join("") + '</div></section>' : "") +
+
+        // 9 — inside the app
+        '<section>' +
+          '<h2 class="h2">What\'s inside the app</h2>' +
+          '<div class="shots">' + SHOTS.map(function (s) { return '<figure><img src="' + s[0] + '" alt="' + esc(s[1]) + '" loading="lazy" width="220" height="477" /><figcaption><b>' + s[1] + '</b>' + s[2] + '</figcaption></figure>'; }).join("") + '</div>' +
+        '</section>' +
+
+        // 10 — privacy
+        '<section class="card privacy">' +
+          '<span class="privacy-ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#137A3C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>' +
+          '<div><div class="card-t">Your password stays yours</div><p class="card-b">You sign in on each platform\'s own website. TimeWell never sees your password, and your usage, filters and goals stay on your phone.</p></div>' +
+        '</section>' +
+
+        // 11 — FAQ
+        '<section>' +
+          '<h2 class="h2">Common questions</h2>' +
+          '<div class="faq">' + FAQ.map(function (q) { return '<details><summary>' + q[0] + '</summary><p>' + q[1] + '</p></details>'; }).join("") + '</div>' +
+        '</section>' +
+
+      '</div>' +
+      '<div class="foot static"><a class="cta" data-act="download" href="' + url + '">' + APPLE + 'Get my plan on the App Store</a>' +
+        '<p class="fine">iPhone only. Your filters take a minute to set up in the app.</p>' +
+        '<button class="link-btn" data-act="restart">Start over</button></div>';
+    },
+  };
+
+  function storeUrl() {
+    var u = C.appStoreUrl;
+    if (C.appStoreCampaign) {
+      var a = attribution();
+      var ct = C.appStoreCampaign + (a.utm_source ? "-" + a.utm_source : "") + (a.utm_campaign ? "-" + a.utm_campaign : "");
+      u += (u.indexOf("?") === -1 ? "?" : "&") + "ct=" + encodeURIComponent(ct.slice(0, 40));
+    }
+    return u;
+  }
+
+  // `quiet` = re-render in place (a selection changed) without the slide-in.
+  function render(quiet) {
+    var s = STEPS[state.step];
+    app.innerHTML = header() +
+      '<main class="screen' + (quiet ? "" : " step-in-" + state.dir) + '">' + VIEWS[s.kind](s) + '</main>';
+    afterRender(s);
+  }
+
+  /* Screen-specific motion: the count-up, the loader. */
+  var loaderTimer = null;
+  function afterRender(s) {
+    clearInterval(loaderTimer);
+    if (s.kind === "result" && !state.answers.resultSeen) {
+      // Once per visitor: reaching the plan is the quiz's completion event.
+      set("resultSeen", true);
+      convert("ViewContent", "ViewContent", { content_name: "scroll-check-plan" });
+    }
+    if (s.kind === "result") {
+      var chart = app.querySelector(".chart");
+      if (chart) setTimeout(function () { chart.classList.add("on"); }, 120);
+    }
+    if (s.kind === "projection") {
+      var el = app.querySelector("[data-count]"), to = parseFloat(el.dataset.count), t0 = performance.now();
+      var bar = app.querySelector("[data-w]");
+      requestAnimationFrame(function () { bar.style.width = bar.dataset.w; });
+      (function tick(t) {
+        var k = Math.min(1, (t - t0) / 900);
+        el.textContent = fmt1(to * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) requestAnimationFrame(tick);
+      })(t0);
+    }
+    if (s.kind === "loader") {
+      var p = 0, ring = document.getElementById("ring"), n = document.getElementById("ringN");
+      loaderTimer = setInterval(function () {
+        p = Math.min(100, p + (p < 60 ? 2 : p < 90 ? 1.2 : 0.8));
+        ring.setAttribute("stroke-dashoffset", (452.4 * (1 - p / 100)).toFixed(1));
+        n.textContent = Math.round(p) + "%";
+        for (var i = 0; i < 3; i++) if (p >= (i + 1) * 33) document.getElementById("chk" + i).classList.add("done");
+        if (p >= 100) { clearInterval(loaderTimer); setTimeout(next, 450); }
+      }, 50);
+    }
+    if (s.kind === "email") {
+      var f = document.getElementById("emailForm");
+      f.addEventListener("submit", function (e) { e.preventDefault(); submitEmail(); });
+    }
+  }
+
+  function submitEmail() {
+    var input = document.getElementById("email"), err = document.getElementById("emailErr");
+    var v = input.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { err.textContent = "That doesn't look like an email address."; input.focus(); return; }
+    set("email", v);
+    track("funnel_lead", { funnel: "scroll-check" });
+    convert("Lead", "SubmitForm", { content_name: "scroll-check" });
+    try {
+      fetch(C.leadEndpoint, {
+        method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+        body: JSON.stringify({ email: v, answers: state.answers, attribution: attribution(), funnel: "scroll-check" }),
+      }).catch(function () {});
+    } catch (e) {}
+    next();
+  }
+
+  /* One delegated click handler for every button on every screen. */
+  app.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-act]");
+    if (!b || b.disabled) return;
+    var act = b.dataset.act, key = b.dataset.key, v = b.dataset.v;
+    var s = STEPS[state.step];
+    if (act === "back") back();
+    else if (act === "next") next();
+    else if (act === "pick") {
+      if (state.step === 0 && !state.answers.started) { set("started", true); track("funnel_started", { funnel: "scroll-check" }); if (window.fbq) fbq("trackCustom", "QuizStarted", { funnel: "scroll-check" }); }
+      pick(key, v);
+    }
+    else if (act === "scale") pick(key, parseInt(v, 10));
+    else if (act === "toggle") {
+      var list = listOf(key).slice(), i = list.indexOf(v);
+      if (i === -1) {
+        // An "exclusive" option ("Nothing yet") clears the others, and vice versa.
+        if (s.exclusive === v) list = [];
+        else if (s.exclusive) list = list.filter(function (x) { return x !== s.exclusive; });
+        list.push(v);
+      } else list.splice(i, 1);
+      set(key, list);
+      render(true);
+    }
+    else if (act === "email") submitEmail();
+    else if (act === "download") {
+      track("funnel_download_click", { funnel: "scroll-check", hours: state.answers.hours, target: state.answers.target });
+      // The App Store button is this funnel's checkout step (the subscription
+      // is bought in the app), so it fires InitiateCheckout — the same event the
+      // Aurora paywall CTA sends. keepalive lets it outlive the page change.
+      convert("InitiateCheckout", "ClickButton", { content_name: "timewell-app-store" });
+    }
+    else if (act === "restart") {
+      state.answers = {};
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      go(0);
+    }
+  });
+
+  render();
+  trackStep();
+})();
+</script>
+</body>
+</html>

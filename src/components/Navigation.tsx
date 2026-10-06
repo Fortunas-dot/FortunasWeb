@@ -6,6 +6,8 @@ const navLinks = [
   { path: '/about', label: 'About' },
   { path: '/what-we-do', label: 'What We Do' },
   { path: '/apps', label: 'Apps' },
+  // A static page in public/timewell (not a router route), so it is linked with a plain <a>.
+  { path: '/timewell/quiz', label: 'Quiz', external: true },
   { path: '/technology', label: 'Technology' },
   { path: '/contact', label: 'Contact' },
 ]
@@ -55,7 +57,15 @@ const Navigation = () => {
           </Link>
 
           <div className="hidden md:flex items-center space-x-8">
-            {navLinks.map((link) => (
+            {navLinks.map((link) => link.external ? (
+              <a
+                key={link.path}
+                href={link.path}
+                className="text-sm font-medium transition-all duration-300 text-fortunas-gray hover:text-fortunas-accent"
+              >
+                {link.label}
+              </a>
+            ) : (
               <Link
                 key={link.path}
                 to={link.path}
@@ -122,7 +132,15 @@ const Navigation = () => {
       {menuOpen && (
         <div className="md:hidden border-t border-white/20 glass-morphism animate-slide-down">
           <div className="px-6 py-4 flex flex-col">
-            {navLinks.map((link) => (
+            {navLinks.map((link) => link.external ? (
+              <a
+                key={link.path}
+                href={link.path}
+                className="py-4 text-base font-medium border-b border-white/10 last:border-0 transition-colors text-fortunas-gray hover:text-fortunas-accent"
+              >
+                {link.label}
+              </a>
+            ) : (
               <Link
                 key={link.path}
                 to={link.path}
