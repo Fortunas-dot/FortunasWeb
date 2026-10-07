@@ -16,7 +16,7 @@ import crypto from 'node:crypto'
 //   META_PIXEL_IDS          optional comma list; replaces the default allowlist
 
 const ALLOWED_PIXELS = new Set(
-  (process.env.META_PIXEL_IDS || '1637640261083299')
+  (process.env.META_PIXEL_IDS || '3209611159230624')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
