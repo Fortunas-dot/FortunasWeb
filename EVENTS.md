@@ -52,8 +52,8 @@ when the quiz starts mirroring it.
 ## Paywall and web checkout (TimeWell Pro)
 
 Aurora's model (`docs/mobile-app-entitlement-integration.md` in Aurora-Website):
-quiz paywall → `/api/register` (TimeWell account, proxied to the TimeWell server) →
-`/api/checkout` (Stripe Embedded Checkout, 7-day trial then €6.99/month) → the
+quiz paywall → `/api/timewell/register` (TimeWell account, proxied to the TimeWell server) →
+`/api/timewell/checkout` (Stripe Embedded Checkout, 7-day trial then €6.99/month) → the
 subscription's metadata carries `app_user_id` = the TimeWell account id →
 RevenueCat's Stripe provider grants `timewell_pro` → the app, signed in with the
 same account, logs RevenueCat in with that id and Pro is there.
@@ -64,17 +64,21 @@ gone) is still matched to the ad click.
 
 ## Railway variables
 
+Stripe settings are per company (each has its own Stripe account), so they carry the
+app's name: `TIMEWELL_STRIPE_…`. A future quiz for another company gets its own set
+and its own `/api/<app>/…` routes.
+
 | Var | Purpose |
 | --- | --- |
 | `META_CAPI_ACCESS_TOKEN` | **Required** for server events. Events Manager → dataset → Settings → Conversions API → *Generate access token*. Without it every server event is skipped (no error). |
 | `META_PIXEL_IDS` | Optional comma list of allowed pixels. Default `3209611159230624`. |
 | `META_TEST_EVENT_CODE` | Only while checking **Test events**; remove afterwards. |
 | `TIKTOK_PIXEL_ID`, `TIKTOK_ACCESS_TOKEN` | TikTok leg; skipped until both are set. |
-| `STRIPE_SECRET_KEY` | `sk_live_…` (or `sk_test_…` to test). Without the Stripe vars, checkout answers "Payments aren't switched on yet". |
-| `STRIPE_PUBLISHABLE_KEY` | `pk_live_…` — sent to the quiz with each checkout session. |
-| `STRIPE_PRICE_TIMEWELL_PRO` | `price_…` of TimeWell Pro, €6.99 / month, recurring. |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_…` of the endpoint `https://fortunas.nl/api/stripe-webhook` (events `checkout.session.completed`, `invoice.paid`). |
-| `FUNNEL_SHARED_SECRET` | Same value on the TimeWell server, so its sign-up rate limit counts each visitor instead of this one server. |
+| `TIMEWELL_STRIPE_SECRET_KEY` | `sk_live_…` (or `sk_test_…` to test). Without the Stripe vars, checkout answers "Payments aren't switched on yet". |
+| `TIMEWELL_STRIPE_PUBLISHABLE_KEY` | `pk_live_…` — sent to the quiz with each checkout session. |
+| `TIMEWELL_STRIPE_PRICE_PRO` | `price_…` of TimeWell Pro, €6.99 / month, recurring. |
+| `TIMEWELL_STRIPE_WEBHOOK_SECRET` | `whsec_…` of the endpoint `https://fortunas.nl/api/timewell/stripe-webhook` (events `checkout.session.completed`, `invoice.paid`). |
+| `TIMEWELL_FUNNEL_SHARED_SECRET` | Same value as `FUNNEL_SHARED_SECRET` on the TimeWell server, so its sign-up rate limit counts each visitor instead of this one server. |
 | `TIMEWELL_API` | Optional; defaults to `https://timewell-production.up.railway.app`. |
 
 ## Checking it works

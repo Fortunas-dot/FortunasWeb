@@ -1107,7 +1107,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = "That doesn't look like an email address."; return; }
     if (pass.length < 8) { err.textContent = "Use at least 8 characters for your password."; return; }
     btn.disabled = true; btn.textContent = "Creating your account…";
-    postJson("/api/register", { email: email, password: pass }).then(function (r) {
+    postJson("/api/timewell/register", { email: email, password: pass }).then(function (r) {
       if (!r.ok || !r.json.account) throw new Error(r.json.error || "Could not create your account.");
       set("accountId", r.json.account.id);
       set("accountEmail", r.json.account.email);
@@ -1141,7 +1141,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     if (!a.accountId) { go(STEPS.findIndex(function (x) { return x.kind === "account"; })); return; }
     destroyCheckout();
     var sessionId = "";
-    postJson("/api/checkout", {
+    postJson("/api/timewell/checkout", {
       userId: a.accountId, email: a.accountEmail, pixel_ids: C.metaPixelIds,
       fbp: getCookie("_fbp"), fbc: getCookie("_fbc"), event_source_url: location.href,
     }).then(function (r) {

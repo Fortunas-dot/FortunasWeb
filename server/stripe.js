@@ -22,21 +22,24 @@ import { sendToTikTok } from './tiktok.js'
 // does the same job here without a database.)
 //
 // Env (Railway → FortunasWeb → Variables):
-//   STRIPE_SECRET_KEY            sk_live_… (sk_test_… to test)
-//   STRIPE_PUBLISHABLE_KEY       pk_live_… — handed to the quiz with each session
-//   STRIPE_WEBHOOK_SECRET        whsec_… of the /api/stripe-webhook endpoint
-//   STRIPE_PRICE_TIMEWELL_PRO    price_… of "TimeWell Pro" €6.99 / month
+// Every name starts with TIMEWELL_: the Fortunas site hosts quizzes for several companies,
+// each with its own Stripe account, so each app gets its own keys and its own webhook path.
+//
+//   TIMEWELL_STRIPE_SECRET_KEY        sk_live_… (sk_test_… to test) — TimeWell's Stripe account
+//   TIMEWELL_STRIPE_PUBLISHABLE_KEY   pk_live_… — handed to the quiz with each session
+//   TIMEWELL_STRIPE_WEBHOOK_SECRET    whsec_… of the /api/timewell/stripe-webhook endpoint
+//   TIMEWELL_STRIPE_PRICE_PRO         price_… of "TimeWell Pro" €6.99 / month
 //   TIMEWELL_API                 optional; the TimeWell account server
 //                                (default https://timewell-production.up.railway.app)
-//   FUNNEL_SHARED_SECRET         same value as on the TimeWell server, so its sign-up
+//   TIMEWELL_FUNNEL_SHARED_SECRET     same value as FUNNEL_SHARED_SECRET on the TimeWell server, so its sign-up
 //                                limits count each visitor, not this one server
 
-const SECRET = process.env.STRIPE_SECRET_KEY || ''
-const PUBLISHABLE = process.env.STRIPE_PUBLISHABLE_KEY || ''
-const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || ''
-const PRICE = process.env.STRIPE_PRICE_TIMEWELL_PRO || ''
+const SECRET = process.env.TIMEWELL_STRIPE_SECRET_KEY || ''
+const PUBLISHABLE = process.env.TIMEWELL_STRIPE_PUBLISHABLE_KEY || ''
+const WEBHOOK_SECRET = process.env.TIMEWELL_STRIPE_WEBHOOK_SECRET || ''
+const PRICE = process.env.TIMEWELL_STRIPE_PRICE_PRO || ''
 const TIMEWELL_API = (process.env.TIMEWELL_API || 'https://timewell-production.up.railway.app').replace(/\/+$/, '')
-const FUNNEL_SHARED_SECRET = process.env.FUNNEL_SHARED_SECRET || ''
+const FUNNEL_SHARED_SECRET = process.env.TIMEWELL_FUNNEL_SHARED_SECRET || ''
 
 const TRIAL_DAYS = 7
 const PRO_PRICE = 6.99
@@ -62,7 +65,7 @@ const visitorIp = (req) =>
 const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)
 
 /* ------------------------------------------------------------------ */
-/* /api/register — create (or sign in to) the TimeWell account         */
+/* /api/timewell/register — create (or sign in to) the TimeWell account         */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -110,7 +113,7 @@ export async function handleRegister(req, body) {
 }
 
 /* ------------------------------------------------------------------ */
-/* /api/checkout — Stripe Embedded Checkout for TimeWell Pro           */
+/* /api/timewell/checkout — Stripe Embedded Checkout for TimeWell Pro           */
 /* ------------------------------------------------------------------ */
 
 async function findCustomer(userId, email) {
@@ -194,10 +197,10 @@ export async function handleCheckout(req, body) {
 }
 
 /* ------------------------------------------------------------------ */
-/* /api/stripe-webhook                                                 */
+/* /api/timewell/stripe-webhook                                        */
 /* ------------------------------------------------------------------ */
 //
-// Stripe → Developers → Webhooks → add endpoint https://fortunas.nl/api/stripe-webhook
+// Stripe → Developers → Webhooks → add endpoint https://fortunas.nl/api/timewell/stripe-webhook
 // with events: checkout.session.completed, invoice.paid.
 // Lean on purpose (Aurora's lesson): fire the event, answer 200 fast.
 

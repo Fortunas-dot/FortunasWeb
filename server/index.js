@@ -129,13 +129,14 @@ const server = http.createServer(async (req, res) => {
     const out = await handleCapi(req, await readBody(req))
     return sendJson(res, out.status, out.json, out.cookies)
   }
-  if (url.pathname === '/api/register' || url.pathname === '/api/checkout') {
+  // TimeWell Pro checkout. Namespaced per app: each company on this site has its own Stripe account.
+  if (url.pathname === '/api/timewell/register' || url.pathname === '/api/timewell/checkout') {
     if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
     const body = await readBody(req)
-    const out = url.pathname === '/api/register' ? await handleRegister(req, body) : await handleCheckout(req, body)
+    const out = url.pathname === '/api/timewell/register' ? await handleRegister(req, body) : await handleCheckout(req, body)
     return sendJson(res, out.status, out.json)
   }
-  if (url.pathname === '/api/stripe-webhook') {
+  if (url.pathname === '/api/timewell/stripe-webhook') {
     if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
     // Stripe signs the exact bytes, so the body is read raw, never parsed first.
     const raw = await readRaw(req, 512 * 1024)
