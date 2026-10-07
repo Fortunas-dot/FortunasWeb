@@ -36,6 +36,10 @@ export function toTikTokEventName(name) {
       return 'SubmitForm'
     case 'InitiateCheckout':
       return 'ClickButton'
+    case 'StartTrial':
+      return 'StartTrial'
+    case 'CompleteRegistration':
+      return 'CompleteRegistration'
     default:
       return null
   }

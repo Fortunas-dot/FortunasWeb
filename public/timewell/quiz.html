@@ -293,6 +293,37 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .faq details[open] summary::after { content: "–"; }
 .faq p { font-size: 14px; line-height: 21px; color: var(--muted); padding-bottom: 16px; }
 
+/* ---------- paywall ---------- */
+.plan-card { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--surface); text-align: left; cursor: pointer; }
+.plan-card.sel { border: 2px solid var(--accent); background: var(--accent-tint); }
+.plan-badge { position: absolute; top: -11px; right: 14px; padding: 3px 10px; border-radius: 999px; background: var(--accent); color: var(--surface); font-size: 11px; font-weight: 600; }
+.plan-radio { width: 22px; height: 22px; border-radius: 999px; border: 1.5px solid var(--line-strong); flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.plan-radio svg { display: none; }
+.plan-card.sel .plan-radio { background: var(--accent); border-color: var(--accent); }
+.plan-card.sel .plan-radio svg { display: block; }
+.plan-name { font-size: 17px; font-weight: 600; }
+.plan-price { display: flex; flex-direction: column; align-items: flex-end; }
+.plan-price b { font-family: var(--serif); font-size: 22px; letter-spacing: -0.5px; }
+.plan-price span { font-size: 12px; color: var(--muted); }
+.cmp { padding: 4px 16px 6px; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1fr) 52px 52px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.cmp-row > :not(:first-child) { justify-self: center; }
+.cmp-head { border-top: 0; padding: 12px 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+.tick { width: 20px; height: 20px; border-radius: 999px; background: #C9D9CC; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tick.pro { background: var(--accent); }
+.nil { width: 10px; height: 2px; border-radius: 2px; background: var(--line-strong); }
+.pro-pill { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--accent-tint); border: 1px solid var(--accent-soft); font-size: 14px; }
+.field-group { display: flex; flex-direction: column; gap: 16px; }
+.muted { color: var(--muted); }
+.sum { display: flex; flex-direction: column; gap: 8px; font-size: 15px; }
+.sum .muted { font-size: 14px; }
+.stripe-mount { min-height: 360px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); padding: 8px; }
+.stripe-mount .fine { padding: 40px 12px; }
+.done-disc { align-self: center; width: 84px; height: 84px; border-radius: 999px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+.done-disc svg { display: block; }
+.plan .wk-n { width: 30px; height: 30px; }
+.card.plan > .plan-row:first-child { border-top: 0; }
+
 /* ---------- footer CTA ---------- */
 .foot { position: sticky; bottom: 0; padding: 12px 20px max(24px, env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg) 78%, rgba(244,242,236,0)); display: flex; flex-direction: column; gap: 10px; }
 .cta { height: 56px; border: 0; border-radius: 16px; background: var(--accent); color: var(--surface); font-size: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; transition: background .15s; }
@@ -387,6 +418,23 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   // then the app can still shield them with Screen Time and a daily limit.
   var SOON = "Filters coming soon — until then, blocked with Screen Time or a daily limit";
 
+  /* ---------- paywall ---------- */
+  var PRO = { trialDays: 7, price: 6.99, priceLabel: "€6.99" };
+  // Free vs Pro. Free = the basics; everything else is Pro.
+  var PRO_ROWS = [
+    ["Hide Reels &amp; Shorts", true, true],
+    ["Screen time &amp; daily goal", true, true],
+    ["Every filter, on every platform", false, true],
+    ["No ads, AI content or like counts", false, true],
+    ["Focus sessions &amp; Sleep mode", false, true],
+    ["App limits &amp; blocking", false, true],
+  ];
+  function trialEndLabel() {
+    // Fixed when the trial starts, so coming back days later still shows the real date.
+    var d = new Date(state.answers.trialEnd || Date.now() + PRO.trialDays * 864e5);
+    try { return d.toLocaleDateString("en-GB", { day: "numeric", month: "long" }); } catch (e) { return d.toDateString(); }
+  }
+
   /* ---------- results page content ---------- */
   // The profile comes from what starts their scroll — their own answer, named.
   var PROFILES = {
@@ -471,6 +519,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     { id: "email", kind: "email", optional: true },
     { id: "loader", kind: "loader" },
     { id: "result", kind: "result" },
+    // Paywall → (Pro) account → Stripe checkout → trial started. Free goes to the App Store.
+    { id: "paywall", kind: "paywall" },
+    { id: "account", kind: "account" },
+    { id: "checkout", kind: "checkout" },
+    { id: "trial", kind: "trial" },
   ];
   // No lead endpoint → nothing would receive the email, so the step isn't shown.
   if (!C.leadEndpoint) STEPS = STEPS.filter(function (s) { return s.id !== "email"; });
@@ -529,8 +582,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
    * is what lets Meta and TikTok drop the duplicate. Mirrors Aurora's
    * fbqTrack + ttqTrack + sendCapi trio.
    */
-  function convert(metaEvent, tiktokEvent, custom) {
-    var id = genEventId();
+  function convert(metaEvent, tiktokEvent, custom, fixedId) {
+    var id = fixedId || genEventId();
     custom = custom || {};
     try { if (window.fbq && C.metaPixelIds.length) fbq("track", metaEvent, custom, { eventID: id }); } catch (e) {}
     try {
@@ -544,7 +597,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
           method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
           body: JSON.stringify({
             event_name: metaEvent, event_id: id, pixel_ids: C.metaPixelIds,
-            email: state.answers.email || "", external_id: visitorId(),
+            email: state.answers.accountEmail || state.answers.email || "", external_id: state.answers.accountId || visitorId(),
             fbp: getCookie("_fbp"), fbc: getCookie("_fbc"),
             custom_data: custom, event_source_url: location.href,
           }),
@@ -810,7 +863,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
       // What the hours add up to, for the goals they picked.
       var spend = timeback.map(function (g) { return SPEND[g] && SPEND[g](back, perYear); }).filter(Boolean).slice(0, 4);
 
-      return '<div class="res-bar"><span>' + LOGO + '<b>Your plan is ready</b></span><a class="res-bar-btn" data-act="download" href="' + url + '">Get the app</a></div>' +
+      return '<div class="res-bar"><span>' + LOGO + '<b>Your plan is ready</b></span><button class="res-bar-btn" data-act="to-paywall">Start my plan</button></div>' +
       '<div class="content res">' +
 
         // 1 — profile
@@ -885,9 +938,80 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
         '</section>' +
 
       '</div>' +
-      '<div class="foot static"><a class="cta" data-act="download" href="' + url + '">' + APPLE + 'Get my plan on the App Store</a>' +
-        '<p class="fine">iPhone only. Your filters take a minute to set up in the app.</p>' +
+      '<div class="foot static"><button class="cta" data-act="to-paywall">Start my plan</button>' +
+        '<p class="fine">Next: choose Free or Pro. iPhone only.</p>' +
         '<button class="link-btn" data-act="restart">Start over</button></div>';
+    },
+
+    /* ---------- paywall: Pro (7 days free, then €6.99/month) or Free ---------- */
+    paywall: function () {
+      var plan = state.answers.plan || "pro";
+      var card = function (id, name, sub, price, per, badge) {
+        var sel = plan === id;
+        return '<button class="plan-card' + (sel ? " sel" : "") + '" data-act="plan" data-v="' + id + '" aria-pressed="' + sel + '">' +
+          (badge ? '<span class="plan-badge">' + badge + '</span>' : "") +
+          '<span class="plan-radio">' + CHECK + '</span>' +
+          '<span class="opt-main"><span class="plan-name">' + name + '</span><span class="opt-desc">' + sub + '</span></span>' +
+          '<span class="plan-price"><b>' + price + '</b><span>' + per + '</span></span></button>';
+      };
+      var rows = PRO_ROWS.map(function (r) {
+        var cell = function (on, pro) { return on ? '<span class="tick' + (pro ? " pro" : "") + '">' + CHECK.replace(/13/g, "11") + '</span>' : '<span class="nil"></span>'; };
+        return '<div class="cmp-row"><span>' + r[0] + '</span>' + cell(r[1], false) + cell(r[2], true) + '</div>';
+      }).join("");
+      var steps = [["Today", "Full Pro access, nothing to pay"], ["Any time in the " + PRO.trialDays + " days", "Cancel in the app — you pay nothing"], ["Day " + PRO.trialDays, PRO.priceLabel + " / month starts if you keep it"]];
+      var pro = plan === "pro";
+      return '<div class="content">' +
+        titles("Your plan is ready", "Choose how you start", "Pro unlocks your whole plan. Free keeps the basics, for as long as you like.") +
+        '<div class="opts">' +
+          card("pro", "TimeWell Pro", "Free for " + PRO.trialDays + " days, then " + PRO.priceLabel + "/month", PRO.priceLabel, "per month", PRO.trialDays + " days free") +
+          card("free", "Free", "Some filters, no card needed", "€0", "forever") +
+        '</div>' +
+        '<div class="card cmp"><div class="cmp-row cmp-head"><span>What you get</span><span>Free</span><span class="accent">Pro</span></div>' + rows + '</div>' +
+        (pro ? '<div class="card"><p class="plan-head" style="padding-top:0">How the free trial works</p><ol class="weeks">' +
+          steps.map(function (w, i) { return '<li><span class="wk-n">' + (i + 1) + '</span><div><b>' + w[0] + '</b><p>' + w[1] + '</p></div></li>'; }).join("") + '</ol></div>' : "") +
+      '</div>' +
+      '<div class="foot">' + (pro
+        ? '<button class="cta" data-act="choose-pro">Start my ' + PRO.trialDays + '-day free trial</button><p class="fine">No charge today. ' + PRO.priceLabel + '/month after ' + PRO.trialDays + ' days. Cancel any time.</p>'
+        : '<a class="cta" data-act="choose-free" href="' + esc(storeUrl()) + '">' + APPLE + 'Get TimeWell Free</a><p class="fine">iPhone only. Upgrade to Pro in the app whenever you like.</p>') +
+      '</div>';
+    },
+
+    /* ---------- account (Pro): the TimeWell login the app will use ---------- */
+    account: function () {
+      var a = state.answers;
+      return '<div class="content">' + titles("Step 1 of 2", "Create your TimeWell account", "You'll sign in to the app with this, and Pro unlocks there automatically.") +
+        '<div class="pro-pill"><span class="tick pro">' + CHECK.replace(/13/g, "11") + '</span><span><b>TimeWell Pro</b> · ' + PRO.trialDays + ' days free, then ' + PRO.priceLabel + '/month</span></div>' +
+        '<form class="field-group" id="accountForm" novalidate>' +
+          '<div class="field"><label class="label" for="acEmail">Email</label><input id="acEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" value="' + esc(a.accountEmail || a.email || "") + '" /></div>' +
+          '<div class="field"><label class="label" for="acPass">Password</label><input id="acPass" type="password" autocomplete="new-password" placeholder="At least 8 characters" /></div>' +
+          '<span class="err" id="acErr" role="alert"></span>' +
+          '<button type="submit" hidden></button>' +
+        '</form>' +
+        '<p class="fine" style="text-align:left">By continuing you agree to our <a href="/timewell/privacy">Privacy Policy</a>. Already have a TimeWell account? Use the same email and password.</p>' +
+      '</div>' +
+      '<div class="foot"><button class="cta" data-act="account" id="acBtn">Continue to payment</button></div>';
+    },
+
+    /* ---------- checkout: Stripe's embedded form, mounted after render ---------- */
+    checkout: function () {
+      return '<div class="content">' + titles("Step 2 of 2", "Start your free trial", "Secure payment by Stripe. You won't be charged today.") +
+        '<div class="card sum"><div class="row-between"><span>Due today</span><b>€0.00</b></div>' +
+        '<div class="row-between muted"><span>From ' + trialEndLabel() + '</span><span>' + PRO.priceLabel + ' / month</span></div></div>' +
+        '<div id="stripeMount" class="stripe-mount"><p class="fine" id="stripeMsg">Loading secure payment…</p></div>' +
+      '</div>';
+    },
+
+    /* ---------- trial started ---------- */
+    trial: function () {
+      var email = state.answers.accountEmail || "your email";
+      var steps = [["Download TimeWell", "From the App Store on your iPhone."], ["Sign in with " + esc(email), "Use the password you just chose."], ["Pro unlocks by itself", "Your filters and goal are waiting."]];
+      return '<div class="content">' +
+        '<div class="done-disc">' + CHECK.replace(/width="13" height="13"/, 'width="40" height="40"') + '</div>' +
+        '<div class="titles" style="text-align:center"><h1 class="h1">Your free trial has started</h1><p class="sub">' + PRO.trialDays + ' days of TimeWell Pro, on us. Three steps and you\'re in.</p></div>' +
+        '<div class="card plan">' + steps.map(function (st, i) { return '<div class="plan-row"><span class="wk-n">' + (i + 1) + '</span><span style="color:var(--ink)"><b style="width:auto;display:block">' + st[0] + '</b><span class="muted">' + st[1] + '</span></span></div>'; }).join("") + '</div>' +
+        '<p class="fine">Trial ends ' + trialEndLabel() + '. Cancel before then and you pay nothing.</p>' +
+      '</div>' +
+      '<div class="foot"><a class="cta" data-act="trial-download" href="' + esc(storeUrl()) + '">' + APPLE + 'Get TimeWell on the App Store</a></div>';
     },
   };
 
@@ -913,6 +1037,11 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   var loaderTimer = null;
   function afterRender(s) {
     clearInterval(loaderTimer);
+    if (s.kind !== "checkout") destroyCheckout();
+    if (s.kind === "account") {
+      document.getElementById("accountForm").addEventListener("submit", function (e) { e.preventDefault(); submitAccount(); });
+    }
+    if (s.kind === "checkout") mountCheckout();
     if (s.kind === "result" && !state.answers.resultSeen) {
       // Once per visitor: reaching the plan is the quiz's completion event.
       set("resultSeen", true);
@@ -964,6 +1093,90 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     next();
   }
 
+  /* ---------- Pro: account → Stripe → trial (Aurora's web checkout) ---------- */
+  function postJson(path, body) {
+    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, json: j }; }); });
+  }
+
+  function submitAccount() {
+    var email = document.getElementById("acEmail").value.trim();
+    var pass = document.getElementById("acPass").value;
+    var err = document.getElementById("acErr"), btn = document.getElementById("acBtn");
+    err.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = "That doesn't look like an email address."; return; }
+    if (pass.length < 8) { err.textContent = "Use at least 8 characters for your password."; return; }
+    btn.disabled = true; btn.textContent = "Creating your account…";
+    postJson("/api/register", { email: email, password: pass }).then(function (r) {
+      if (!r.ok || !r.json.account) throw new Error(r.json.error || "Could not create your account.");
+      set("accountId", r.json.account.id);
+      set("accountEmail", r.json.account.email);
+      track("funnel_account_created", { funnel: "scroll-check" });
+      // Aurora fires CompleteRegistration when the account is made (pixel + CAPI).
+      convert("CompleteRegistration", "CompleteRegistration", { content_name: "timewell-pro" });
+      next();
+    }).catch(function (e) {
+      err.textContent = e.message || "Could not create your account.";
+      btn.disabled = false; btn.textContent = "Continue to payment";
+    });
+  }
+
+  var embedded = null;
+  function destroyCheckout() {
+    if (embedded) { try { embedded.destroy(); } catch (e) {} embedded = null; }
+  }
+  function loadStripeJs() {
+    if (window.Stripe) return Promise.resolve(window.Stripe);
+    return new Promise(function (resolve, reject) {
+      var sc = document.createElement("script");
+      sc.src = "https://js.stripe.com/v3/";
+      sc.onload = function () { resolve(window.Stripe); };
+      sc.onerror = function () { reject(new Error("Could not load the payment form.")); };
+      document.head.appendChild(sc);
+    });
+  }
+  function mountCheckout() {
+    var msg = document.getElementById("stripeMsg");
+    var a = state.answers;
+    if (!a.accountId) { go(STEPS.findIndex(function (x) { return x.kind === "account"; })); return; }
+    destroyCheckout();
+    var sessionId = "";
+    postJson("/api/checkout", {
+      userId: a.accountId, email: a.accountEmail, pixel_ids: C.metaPixelIds,
+      fbp: getCookie("_fbp"), fbc: getCookie("_fbc"), event_source_url: location.href,
+    }).then(function (r) {
+      if (!r.ok || !r.json.clientSecret) throw new Error(r.json.error || "Could not start checkout.");
+      sessionId = r.json.sessionId;
+      var pk = r.json.publishableKey;
+      return loadStripeJs().then(function (Stripe) {
+        return Stripe(pk).initEmbeddedCheckout({
+          clientSecret: r.json.clientSecret,
+          // Payments without a 3-D Secure redirect finish here, in the page.
+          onComplete: function () { trialStarted(sessionId); },
+        });
+      });
+    }).then(function (ec) {
+      if (STEPS[state.step].kind !== "checkout") { try { ec.destroy(); } catch (e) {} return; }
+      embedded = ec;
+      if (msg) msg.remove();
+      ec.mount("#stripeMount");
+    }).catch(function (e) {
+      if (msg) msg.textContent = e.message || "Could not start checkout.";
+    });
+  }
+
+  // StartTrial — browser pixel + CAPI with id trial_<session>, the same id the
+  // Stripe webhook uses, so Meta counts the trial once (Aurora's fireCheckoutSuccess).
+  function trialStarted(sessionId) {
+    if (sessionId && state.answers.trialSession === sessionId) { go(STEPS.findIndex(function (x) { return x.kind === "trial"; })); return; }
+    set("trialSession", sessionId || "");
+    set("trialEnd", Date.now() + PRO.trialDays * 864e5);
+    track("funnel_trial_started", { funnel: "scroll-check" });
+    convert("StartTrial", "StartTrial", { value: 0, currency: "EUR", predicted_ltv: +(PRO.price * 3).toFixed(2) }, sessionId ? "trial_" + sessionId : "");
+    destroyCheckout();
+    go(STEPS.findIndex(function (x) { return x.kind === "trial"; }));
+  }
+
   /* One delegated click handler for every button on every screen. */
   app.addEventListener("click", function (e) {
     var b = e.target.closest("[data-act]");
@@ -989,6 +1202,28 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
       render(true);
     }
     else if (act === "email") submitEmail();
+    else if (act === "to-paywall") {
+      next();
+    }
+    else if (act === "plan") {
+      set("plan", v);
+      render(true);
+    }
+    else if (act === "choose-pro") {
+      set("plan", "pro");
+      track("funnel_choose_pro", { funnel: "scroll-check" });
+      convert("InitiateCheckout", "ClickButton", { content_name: "timewell-pro", value: PRO.price, currency: "EUR" });
+      next();
+    }
+    else if (act === "choose-free") {
+      track("funnel_choose_free", { funnel: "scroll-check" });
+      try { if (window.fbq && C.metaPixelIds.length) fbq("trackCustom", "ChoseFree", { content_name: "timewell-free" }); } catch (e2) {}
+      // The App Store opens via the link itself.
+    }
+    else if (act === "account") submitAccount();
+    else if (act === "trial-download") {
+      track("funnel_download_click", { funnel: "scroll-check", plan: "pro" });
+    }
     else if (act === "download") {
       track("funnel_download_click", { funnel: "scroll-check", hours: state.answers.hours, target: state.answers.target });
       // The App Store button is this funnel's checkout step (the subscription
@@ -1003,8 +1238,19 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     }
   });
 
-  render();
-  trackStep();
+  // A card that needed 3-D Secure leaves the page and comes back here.
+  (function () {
+    try {
+      var q = new URLSearchParams(location.search);
+      if (q.get("checkout") === "success") {
+        history.replaceState({}, "", location.pathname);
+        trialStarted(q.get("session_id") || "");
+        return;
+      }
+    } catch (e) {}
+    render();
+    trackStep();
+  })();
 })();
 </script>
 </body>

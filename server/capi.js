@@ -35,7 +35,54 @@ const META_CAPI_TOKEN = process.env.META_CAPI_ACCESS_TOKEN || ''
 const META_TEST_EVENT_CODE = process.env.META_TEST_EVENT_CODE || ''
 const GRAPH_VERSION = 'v21.0'
 
-const ALLOWED_EVENTS = new Set(['ViewContent', 'Lead', 'InitiateCheckout'])
+// StartTrial is mirrored from the browser when Stripe checkout completes; the
+// Stripe webhook sends the same event with the same id (trial_<session id>).
+const ALLOWED_EVENTS = new Set(['ViewContent', 'Lead', 'InitiateCheckout', 'CompleteRegistration', 'StartTrial'])
+
+/** The allowlisted subset of the given pixel ids (all allowlisted pixels if none given). */
+export function allowedPixels(ids) {
+  const list = (Array.isArray(ids) ? ids : String(ids || '').split(',')).map((s) => String(s).trim()).filter(Boolean)
+  return list.length ? list.filter((id) => META_PIXEL_IDS.has(id)) : [...META_PIXEL_IDS]
+}
+
+/**
+ * POST one event to each pixel's Conversions API endpoint. Shared by the browser
+ * bridge below and the Stripe webhook (server/stripe.js). Never throws.
+ */
+export async function sendMetaEvent(pixels, event) {
+  if (!META_CAPI_TOKEN) return { ok: true, skipped: 'no-capi-token' }
+  if (!pixels.length) return { ok: true, skipped: 'no-allowed-pixel' }
+  const payload = { ...(META_TEST_EVENT_CODE ? { test_event_code: META_TEST_EVENT_CODE } : {}), data: [event] }
+  const results = await Promise.all(
+    pixels.map(async (pixel) => {
+      try {
+        const res = await fetch(
+          `https://graph.facebook.com/${GRAPH_VERSION}/${pixel}/events?access_token=${encodeURIComponent(META_CAPI_TOKEN)}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) console.error('[capi] Meta CAPI error:', pixel, event.event_name, res.status, data)
+        return { pixel, ok: res.ok, data }
+      } catch (e) {
+        console.error('[capi] Meta CAPI request failed:', pixel, event.event_name, e?.message || e)
+        return { pixel, ok: false }
+      }
+    }),
+  )
+  return { ok: results.every((r) => r.ok), results }
+}
+
+/** Meta user_data from what we know about a person. Email / external id hashed, fbp/fbc raw. */
+export function buildUserData({ email, externalId, fbp, fbc, ip, ua }) {
+  const u = {}
+  if (email) u.em = [sha256(String(email).trim().toLowerCase())]
+  if (externalId) u.external_id = [sha256(String(externalId).trim())]
+  if (fbp) u.fbp = fbp
+  if (fbc) u.fbc = fbc
+  if (ua) u.client_user_agent = ua
+  if (ip) u.client_ip_address = ip
+  return u
+}
 
 function sha256(v) {
   return crypto.createHash('sha256').update(v).digest('hex')
@@ -119,20 +166,15 @@ export async function handleCapi(req, body) {
       }).catch((e) => console.error('[tiktok] browser-mirror forward failed:', e?.message || e))
     : Promise.resolve()
 
-  const payload = {
-    ...(META_TEST_EVENT_CODE ? { test_event_code: META_TEST_EVENT_CODE } : {}),
-    data: [
-      {
-        event_name: eventName,
-        event_time: Math.floor(Date.now() / 1000),
-        action_source: 'website',
-        // Same id the browser pixel used → Meta de-duplicates the pair.
-        event_id: String(body.event_id || ''),
-        event_source_url: eventSourceUrl,
-        user_data: userData,
-        custom_data: custom,
-      },
-    ],
+  const event = {
+    event_name: eventName,
+    event_time: Math.floor(Date.now() / 1000),
+    action_source: 'website',
+    // Same id the browser pixel used → Meta de-duplicates the pair.
+    event_id: String(body.event_id || ''),
+    event_source_url: eventSourceUrl,
+    user_data: userData,
+    custom_data: custom,
   }
 
   const cookies = generatedFbp
@@ -140,27 +182,12 @@ export async function handleCapi(req, body) {
     : []
 
   try {
-    let metaOk = true
-    let meta = { skipped: !META_CAPI_TOKEN ? 'no-capi-token' : 'no-allowed-pixel' }
-    if (META_CAPI_TOKEN && pixels.length) {
-      const results = await Promise.all(
-        pixels.map(async (pixel) => {
-          const res = await fetch(
-            `https://graph.facebook.com/${GRAPH_VERSION}/${pixel}/events?access_token=${encodeURIComponent(META_CAPI_TOKEN)}`,
-            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) },
-          )
-          const data = await res.json().catch(() => ({}))
-          if (!res.ok) console.error('[capi] Meta CAPI error:', pixel, res.status, data)
-          return { pixel, ok: res.ok, data }
-        }),
-      )
-      metaOk = results.every((r) => r.ok)
-      meta = results
-    }
+    const sent = await sendMetaEvent(pixels, event)
+    const meta = sent.results || { skipped: sent.skipped }
     await tiktokPromise
     return {
       status: 200,
-      json: metaOk ? { ok: true, forwarded: eventName, meta } : { ok: false, meta },
+      json: sent.ok ? { ok: true, forwarded: eventName, meta } : { ok: false, meta },
       cookies,
     }
   } catch (e) {

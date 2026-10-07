@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { handleCapi } from './capi.js'
+import { handleCheckout, handleRegister, handleStripeWebhook } from './stripe.js'
 
 // Production server for fortunas.nl on Railway (`npm start`).
 //
@@ -82,6 +83,22 @@ function sendJson(res, status, json, cookies = []) {
   res.end(JSON.stringify(json))
 }
 
+function readRaw(req, limit) {
+  return new Promise((resolve) => {
+    let size = 0
+    const chunks = []
+    req.on('data', (c) => {
+      size += c.length
+      if (size > limit) {
+        resolve(null)
+        req.destroy()
+      } else chunks.push(c)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', () => resolve(null))
+  })
+}
+
 function readBody(req, limit = 32 * 1024) {
   return new Promise((resolve) => {
     let size = 0
@@ -111,6 +128,20 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
     const out = await handleCapi(req, await readBody(req))
     return sendJson(res, out.status, out.json, out.cookies)
+  }
+  if (url.pathname === '/api/register' || url.pathname === '/api/checkout') {
+    if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
+    const body = await readBody(req)
+    const out = url.pathname === '/api/register' ? await handleRegister(req, body) : await handleCheckout(req, body)
+    return sendJson(res, out.status, out.json)
+  }
+  if (url.pathname === '/api/stripe-webhook') {
+    if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
+    // Stripe signs the exact bytes, so the body is read raw, never parsed first.
+    const raw = await readRaw(req, 512 * 1024)
+    if (!raw) return sendJson(res, 400, { message: 'Invalid body' })
+    const out = await handleStripeWebhook(req, raw)
+    return sendJson(res, out.status, out.json)
   }
   if (url.pathname.startsWith('/api/')) return sendJson(res, 404, { message: 'Not found' })
   if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { message: 'Method not allowed' })
