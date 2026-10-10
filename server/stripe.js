@@ -130,8 +130,9 @@ const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)
 /**
  * The quiz's account step. Proxies to the TimeWell server's own /auth routes
  * server-side (no CORS, and the account server stays the only place passwords
- * are handled). An address that already has an account is signed in with the
- * password given instead, so someone who had the app first can still upgrade.
+ * are handled). An address that already has an account is refused: this step
+ * creates a new account, and continuing with someone's existing one — even with
+ * the right password — is not what it promises.
  * Returns only the account id and email — never the session token.
  */
 export async function handleRegister(req, body) {
@@ -151,14 +152,12 @@ export async function handleRegister(req, body) {
       body: JSON.stringify({ email, password }),
     })
   try {
-    let res = await call('/auth/register')
+    const res = await call('/auth/register')
     if (res.status === 409) {
-      // Already registered: those credentials may simply be theirs — sign in instead.
-      const signin = await call('/auth/signin')
-      if (!signin.ok) {
-        return { status: 409, json: { error: 'This email already has a TimeWell account. Enter its password to continue.' } }
+      return {
+        status: 409,
+        json: { error: 'This email already has a TimeWell account. Use a different email address.' },
       }
-      res = signin
     }
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data?.account?.id) {
