@@ -93,6 +93,31 @@ export const checkoutConfigured = () => {
 }
 export const stripeMode = () => MODE
 
+/**
+ * GET /api/timewell/status — which Stripe settings are present and shaped right,
+ * as booleans only (never a key), so a deploy can be checked from outside.
+ */
+export function stripeStatus() {
+  const check = (a, m) => {
+    const pre = m === 'live' ? 'live' : 'test'
+    return {
+      secretKey: a.secret.startsWith(`sk_${pre}_`) || a.secret.startsWith(`rk_${pre}_`),
+      publishableKey: a.publishable.startsWith(`pk_${pre}_`),
+      price: a.price.startsWith('price_'),
+      webhookSecret: a.webhookSecret.startsWith('whsec_'),
+    }
+  }
+  const test = check(ACCOUNTS.test, 'test')
+  const live = check(ACCOUNTS.live, 'live')
+  return {
+    mode: MODE,
+    checkoutReady: checkoutConfigured(),
+    test: { ...test, complete: Object.values(test).every(Boolean) },
+    live: { ...live, complete: Object.values(live).every(Boolean) },
+    funnelSharedSecret: Boolean(FUNNEL_SHARED_SECRET),
+  }
+}
+
 const clip = (v, n = 450) => String(v || '').slice(0, n) // Stripe metadata values max 500 chars
 const visitorIp = (req) =>
   String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim()

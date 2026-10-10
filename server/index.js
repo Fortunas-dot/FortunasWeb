@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { handleCapi } from './capi.js'
-import { handleCheckout, handleRegister, handleStripeWebhook } from './stripe.js'
+import { handleCheckout, handleRegister, handleStripeWebhook, stripeStatus } from './stripe.js'
 
 // Production server for fortunas.nl on Railway (`npm start`).
 //
@@ -136,6 +136,7 @@ const server = http.createServer(async (req, res) => {
     const out = url.pathname === '/api/timewell/register' ? await handleRegister(req, body) : await handleCheckout(req, body)
     return sendJson(res, out.status, out.json)
   }
+  if (url.pathname === '/api/timewell/status') return sendJson(res, 200, stripeStatus())
   if (url.pathname === '/api/timewell/stripe-webhook') {
     if (req.method !== 'POST') return sendJson(res, 405, { message: 'POST only' })
     // Stripe signs the exact bytes, so the body is read raw, never parsed first.
