@@ -25,19 +25,55 @@ import { sendToTikTok } from './tiktok.js'
 // Every name starts with TIMEWELL_: the Fortunas site hosts quizzes for several companies,
 // each with its own Stripe account, so each app gets its own keys and its own webhook path.
 //
-//   TIMEWELL_STRIPE_SECRET_KEY        sk_live_… (sk_test_… to test) — TimeWell's Stripe account
-//   TIMEWELL_STRIPE_PUBLISHABLE_KEY   pk_live_… — handed to the quiz with each session
-//   TIMEWELL_STRIPE_WEBHOOK_SECRET    whsec_… of the /api/timewell/stripe-webhook endpoint
-//   TIMEWELL_STRIPE_PRICE_PRO         price_… of "TimeWell Pro" €6.99 / month
+// Test (Stripe sandbox) and live keys sit side by side; one switch picks the active set:
+//
+//   TIMEWELL_STRIPE_MODE                    test | live — which set the checkout uses
+//   TIMEWELL_STRIPE_{TEST,LIVE}_SECRET_KEY        sk_test_… / sk_live_…
+//   TIMEWELL_STRIPE_{TEST,LIVE}_PUBLISHABLE_KEY   pk_test_… / pk_live_… — handed to the quiz
+//   TIMEWELL_STRIPE_{TEST,LIVE}_PRICE_PRO         price_… of "TimeWell Pro" €6.99 / month
+//   TIMEWELL_STRIPE_{TEST,LIVE}_WEBHOOK_SECRET    whsec_… of that account's webhook to
+//                                                 /api/timewell/stripe-webhook
+//
+// The webhook accepts events from both accounts — each is verified against its own
+// secret and handled with its own client — so the sandbox stays usable after going
+// live. Test-mode trials and purchases are never sent to Meta.
+// (The earlier single set, TIMEWELL_STRIPE_SECRET_KEY etc., still works: it is filed
+// under test or live by its key prefix.)
 //   TIMEWELL_API                 optional; the TimeWell account server
 //                                (default https://timewell-production.up.railway.app)
 //   TIMEWELL_FUNNEL_SHARED_SECRET     same value as FUNNEL_SHARED_SECRET on the TimeWell server, so its sign-up
 //                                limits count each visitor, not this one server
 
-const SECRET = process.env.TIMEWELL_STRIPE_SECRET_KEY || ''
-const PUBLISHABLE = process.env.TIMEWELL_STRIPE_PUBLISHABLE_KEY || ''
-const WEBHOOK_SECRET = process.env.TIMEWELL_STRIPE_WEBHOOK_SECRET || ''
-const PRICE = process.env.TIMEWELL_STRIPE_PRICE_PRO || ''
+const env = (name) => (process.env[name] || '').trim()
+
+/** One Stripe account's settings: the sandbox ('test') or the real one ('live'). */
+function accountFor(mode) {
+  const M = mode.toUpperCase()
+  let a = {
+    mode,
+    secret: env(`TIMEWELL_STRIPE_${M}_SECRET_KEY`),
+    publishable: env(`TIMEWELL_STRIPE_${M}_PUBLISHABLE_KEY`),
+    price: env(`TIMEWELL_STRIPE_${M}_PRICE_PRO`),
+    webhookSecret: env(`TIMEWELL_STRIPE_${M}_WEBHOOK_SECRET`),
+  }
+  // The first setup used one unprefixed set; keep it working, filed by key prefix.
+  const legacy = env('TIMEWELL_STRIPE_SECRET_KEY')
+  if (!a.secret && legacy.startsWith(mode === 'live' ? 'sk_live_' : 'sk_test_')) {
+    a = {
+      mode,
+      secret: legacy,
+      publishable: env('TIMEWELL_STRIPE_PUBLISHABLE_KEY'),
+      price: env('TIMEWELL_STRIPE_PRICE_PRO'),
+      webhookSecret: env('TIMEWELL_STRIPE_WEBHOOK_SECRET'),
+    }
+  }
+  a.client = a.secret ? new Stripe(a.secret) : null
+  return a
+}
+const ACCOUNTS = { test: accountFor('test'), live: accountFor('live') }
+const MODE = env('TIMEWELL_STRIPE_MODE').toLowerCase() === 'live' ? 'live' : 'test'
+/** The account new checkouts go to. */
+const active = () => ACCOUNTS[MODE]
 const TIMEWELL_API = (process.env.TIMEWELL_API || 'https://timewell-production.up.railway.app').replace(/\/+$/, '')
 const FUNNEL_SHARED_SECRET = process.env.TIMEWELL_FUNNEL_SHARED_SECRET || ''
 
@@ -51,13 +87,11 @@ const QUIZ_PATH = '/timewell/quiz'
 const EMBEDDED_API_VERSION = '2026-03-25.dahlia'
 const EMBEDDED_UI_MODE = 'embedded_page'
 
-let _stripe = null
-function stripe() {
-  if (!_stripe) _stripe = new Stripe(SECRET)
-  return _stripe
+export const checkoutConfigured = () => {
+  const a = active()
+  return Boolean(a.secret && a.publishable && a.price)
 }
-
-export const checkoutConfigured = () => Boolean(SECRET && PUBLISHABLE && PRICE)
+export const stripeMode = () => MODE
 
 const clip = (v, n = 450) => String(v || '').slice(0, n) // Stripe metadata values max 500 chars
 const visitorIp = (req) =>
@@ -116,8 +150,7 @@ export async function handleRegister(req, body) {
 /* /api/timewell/checkout — Stripe Embedded Checkout for TimeWell Pro           */
 /* ------------------------------------------------------------------ */
 
-async function findCustomer(userId, email) {
-  const s = stripe()
+async function findCustomer(s, userId, email) {
   try {
     const found = await s.customers.search({ query: `metadata['app_user_id']:'${userId.replace(/'/g, '')}'`, limit: 1 })
     if (found.data[0]) return found.data[0]
@@ -147,8 +180,9 @@ export async function handleCheckout(req, body) {
   }
 
   try {
-    const s = stripe()
-    let customer = await findCustomer(userId, email)
+    const acct = active()
+    const s = acct.client
+    let customer = await findCustomer(s, userId, email)
     if (customer) {
       if (customer.metadata?.app_user_id !== userId) {
         customer = await s.customers.update(customer.id, { metadata: { ...customer.metadata, app_user_id: userId } })
@@ -163,7 +197,7 @@ export async function handleCheckout(req, body) {
     const session = await s.checkout.sessions.create(
       {
         mode: 'subscription',
-        line_items: [{ price: PRICE, quantity: 1 }],
+        line_items: [{ price: acct.price, quantity: 1 }],
         customer: customer.id,
         client_reference_id: userId,
         metadata: { plan: 'pro_monthly', email, app_user_id: userId },
@@ -188,7 +222,10 @@ export async function handleCheckout(req, body) {
     )
     return {
       status: 200,
-      json: { clientSecret: session.client_secret, sessionId: session.id, publishableKey: PUBLISHABLE, trial: !hadTrial },
+      json: {
+        clientSecret: session.client_secret, sessionId: session.id, publishableKey: acct.publishable,
+        trial: !hadTrial, live: acct.mode === 'live',
+      },
     }
   } catch (e) {
     console.error('[checkout] error:', e?.message || e)
@@ -217,27 +254,39 @@ function eventFromSubscription(sub, extra) {
 }
 
 export async function handleStripeWebhook(req, rawBody) {
-  if (!SECRET || !WEBHOOK_SECRET) return { status: 503, json: { error: 'not configured' } }
-  let event
-  try {
-    event = stripe().webhooks.constructEvent(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET)
-  } catch (e) {
-    console.error('[stripe-webhook] bad signature:', e?.message || e)
+  // Try each account's secret: the sandbox and the live account both post here.
+  const candidates = [ACCOUNTS.live, ACCOUNTS.test].filter((a) => a.client && a.webhookSecret)
+  if (!candidates.length) return { status: 503, json: { error: 'not configured' } }
+  let event = null
+  let acct = null
+  for (const a of candidates) {
+    try {
+      event = a.client.webhooks.constructEvent(rawBody, req.headers['stripe-signature'], a.webhookSecret)
+      acct = a
+      break
+    } catch {
+      /* not this account's signature — try the next */
+    }
+  }
+  if (!event) {
+    console.error('[stripe-webhook] bad signature')
     return { status: 400, json: { error: 'bad signature' } }
   }
+  // Sandbox trials and purchases must not reach the real pixel and skew ad stats.
+  const toMeta = event.livemode === true
 
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object
       if (session.mode !== 'subscription' || !session.subscription) return { status: 200, json: { ok: true } }
-      const s = stripe()
+      const s = acct.client
       const sub = await s.subscriptions.retrieve(String(session.subscription))
       const email = session.customer_details?.email || session.metadata?.email || ''
       const ctx = eventFromSubscription(sub, { email })
       const trialing = sub.status === 'trialing'
       const id = `trial_${session.id}` // the browser fires StartTrial with this same id
 
-      if (trialing) {
+      if (trialing && toMeta) {
         await sendMetaEvent(ctx.pixels, {
           event_name: 'StartTrial',
           event_time: Math.floor(Date.now() / 1000),
@@ -260,14 +309,14 @@ export async function handleStripeWebhook(req, rawBody) {
       const inv = event.data.object
       const subId = inv.subscription || inv.parent?.subscription_details?.subscription
       if (!subId || !(inv.amount_paid > 0)) return { status: 200, json: { ok: true } } // the €0 trial invoice
-      const s = stripe()
+      const s = acct.client
       const sub = await s.subscriptions.retrieve(String(subId))
       // Purchase is the FIRST real payment only; renewals are not new conversions.
       if (sub.metadata?.purchase_sent === '1') return { status: 200, json: { ok: true, skipped: 'already-sent' } }
       const ctx = eventFromSubscription(sub, { email: inv.customer_email || '' })
       const id = `purchase_${sub.id}` // stable: a webhook retry collapses into one event
       const value = inv.amount_paid / 100
-      await sendMetaEvent(ctx.pixels, {
+      if (toMeta) await sendMetaEvent(ctx.pixels, {
         event_name: 'Purchase',
         event_time: Math.floor(Date.now() / 1000),
         action_source: 'website',
@@ -276,7 +325,7 @@ export async function handleStripeWebhook(req, rawBody) {
         user_data: ctx.userData,
         custom_data: { value, currency: String(inv.currency || 'eur').toUpperCase() },
       })
-      sendToTikTok({
+      if (toMeta) sendToTikTok({
         eventName: 'Purchase', eventId: id, email: inv.customer_email || '', userId: ctx.userId,
         ip: ctx.ip, ua: ctx.ua, eventSourceUrl: ctx.sourceUrl, value, currency: CURRENCY,
       }).catch(() => {})

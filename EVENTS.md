@@ -74,12 +74,18 @@ and its own `/api/<app>/…` routes.
 | `META_PIXEL_IDS` | Optional comma list of allowed pixels. Default `3209611159230624`. |
 | `META_TEST_EVENT_CODE` | Only while checking **Test events**; remove afterwards. |
 | `TIKTOK_PIXEL_ID`, `TIKTOK_ACCESS_TOKEN` | TikTok leg; skipped until both are set. |
-| `TIMEWELL_STRIPE_SECRET_KEY` | `sk_live_…` (or `sk_test_…` to test). Without the Stripe vars, checkout answers "Payments aren't switched on yet". |
-| `TIMEWELL_STRIPE_PUBLISHABLE_KEY` | `pk_live_…` — sent to the quiz with each checkout session. |
-| `TIMEWELL_STRIPE_PRICE_PRO` | `price_…` of TimeWell Pro, €6.99 / month, recurring. |
-| `TIMEWELL_STRIPE_WEBHOOK_SECRET` | `whsec_…` of the endpoint `https://fortunas.nl/api/timewell/stripe-webhook` (events `checkout.session.completed`, `invoice.paid`). |
+| `TIMEWELL_STRIPE_MODE` | `test` or `live` — which set below the checkout uses. Switch here; nothing else changes. |
+| `TIMEWELL_STRIPE_TEST_SECRET_KEY` / `TIMEWELL_STRIPE_LIVE_SECRET_KEY` | `sk_test_…` / `sk_live_…` |
+| `TIMEWELL_STRIPE_TEST_PUBLISHABLE_KEY` / `…_LIVE_PUBLISHABLE_KEY` | `pk_test_…` / `pk_live_…` — sent to the quiz with each checkout session. |
+| `TIMEWELL_STRIPE_TEST_PRICE_PRO` / `…_LIVE_PRICE_PRO` | `price_…` of TimeWell Pro (€6.99 / month) in that account. |
+| `TIMEWELL_STRIPE_TEST_WEBHOOK_SECRET` / `…_LIVE_WEBHOOK_SECRET` | `whsec_…` of that account's webhook to `https://fortunas.nl/api/timewell/stripe-webhook` (events `checkout.session.completed`, `invoice.paid`). The endpoint accepts both accounts, each checked against its own secret. |
 | `TIMEWELL_FUNNEL_SHARED_SECRET` | Same value as `FUNNEL_SHARED_SECRET` on the TimeWell server, so its sign-up rate limit counts each visitor instead of this one server. |
 | `TIMEWELL_API` | Optional; defaults to `https://timewell-production.up.railway.app`. |
+
+Test-mode (sandbox) trials and purchases are never sent to Meta, from the browser or
+the webhook, so testing with card 4242… cannot skew the ad data. The older single set
+(`TIMEWELL_STRIPE_SECRET_KEY`, …) still works and is filed under test or live by its
+key prefix.
 
 ## Checking it works
 

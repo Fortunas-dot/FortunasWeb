@@ -1147,6 +1147,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     }).then(function (r) {
       if (!r.ok || !r.json.clientSecret) throw new Error(r.json.error || "Could not start checkout.");
       sessionId = r.json.sessionId;
+      set("stripeLive", r.json.live === true);
       var pk = r.json.publishableKey;
       return loadStripeJs().then(function (Stripe) {
         return Stripe(pk).initEmbeddedCheckout({
@@ -1171,8 +1172,9 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
     if (sessionId && state.answers.trialSession === sessionId) { go(STEPS.findIndex(function (x) { return x.kind === "trial"; })); return; }
     set("trialSession", sessionId || "");
     set("trialEnd", Date.now() + PRO.trialDays * 864e5);
-    track("funnel_trial_started", { funnel: "scroll-check" });
-    convert("StartTrial", "StartTrial", { value: 0, currency: "EUR", predicted_ltv: +(PRO.price * 3).toFixed(2) }, sessionId ? "trial_" + sessionId : "");
+    track("funnel_trial_started", { funnel: "scroll-check", live: state.answers.stripeLive === true });
+    // A sandbox checkout (test keys, card 4242…) must not reach the real pixel.
+    if (state.answers.stripeLive === true) convert("StartTrial", "StartTrial", { value: 0, currency: "EUR", predicted_ltv: +(PRO.price * 3).toFixed(2) }, sessionId ? "trial_" + sessionId : "");
     destroyCheckout();
     go(STEPS.findIndex(function (x) { return x.kind === "trial"; }));
   }
